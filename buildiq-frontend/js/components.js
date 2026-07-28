@@ -91,7 +91,7 @@ const Components = (() => {
     return `
       <div class="card card-hover member-card" data-id="${member.id}" style="position:relative; overflow:hidden;">
         <div style="position:absolute; top:0; left:0; right:0; height:4px; background:${color};"></div>
-        <div class="flex items-center gap-12" style="margin-top:6px;">
+        <div class="flex items-center gap-12 clickable-entity" data-entity="member" data-id="${member.id}" style="margin-top:6px; cursor:pointer;">
           ${createAvatar(member.full_name, "lg", member.avatar_color)}
           <div style="min-width:0;">
             <div style="font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(member.full_name)}</div>
@@ -125,7 +125,7 @@ const Components = (() => {
     return `
       <div class="card card-hover project-card" data-id="${project.id}">
         <div class="flex justify-between items-center" style="margin-bottom:10px;">
-          <div>
+          <div class="clickable-entity" data-entity="project" data-id="${project.id}" style="cursor:pointer;">
             <div style="font-weight:700; font-size:15.5px;">${escapeHtml(project.title)}</div>
             <div class="flex gap-8" style="margin-top:6px;">
               ${createBadge(project.type, "blue")}
@@ -160,12 +160,13 @@ const Components = (() => {
   function createComplaintCard(c) {
     const sevType = severityColor(c.severity);
     const sentimentIcon = c.sentiment === "Angry" ? "fa-face-angry" : c.sentiment === "Frustrated" ? "fa-face-frown" : "fa-face-meh";
+    const entityAttr = c.submitted_by_type === "client" ? `data-entity="client" data-id="${c.submitted_by||''}"` : `data-entity="member" data-id="${c.submitted_by||''}"`;
     return `
       <div class="card complaint-card" data-id="${c.id}" style="border-left:4px solid var(--${sevType === 'gray' ? 'text-muted' : sevType});">
         <div class="flex justify-between items-center" style="margin-bottom:8px;">
           <div class="flex items-center gap-8">
             <span class="mono" style="font-size:12px; color:var(--text-muted);">${c.id}</span>
-            <span style="font-size:13px; font-weight:600;">${escapeHtml(c.customer_name)}</span>
+            <span class="clickable-entity" ${entityAttr} style="font-size:13px; font-weight:600; cursor:pointer;">${escapeHtml(c.customer_name)}</span>
           </div>
           <span style="font-size:12px; color:var(--text-muted);">${timeAgo(c.created_at)}</span>
         </div>
@@ -210,7 +211,7 @@ const Components = (() => {
             </div>
           </div>
           <div style="flex:1; min-width:0;">
-            <div class="flex items-center gap-8">
+            <div class="flex items-center gap-8 clickable-entity" data-entity="member" data-id="${(window.MockData && MockData.getMemberByName(log.user) || {}).id || ''}" style="cursor:pointer;">
               ${createAvatar(log.user, "sm")}
               <span style="font-weight:700; font-size:14px;">${escapeHtml(log.user)}</span>
               ${createBadge(log.user_role, roleColor(log.user_role))}
