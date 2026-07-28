@@ -82,6 +82,7 @@ const ComplaintsPage = (() => {
     container.innerHTML = `<div class="complaints-grid">${list.map(c => complaintCardWithRole(c)).join("")}</div>`;
     Utils.qsa(".view-complaint-btn").forEach(b => b.addEventListener("click", () => openDetail(b.dataset.id)));
     Utils.qsa(".resolve-complaint-btn").forEach(b => b.addEventListener("click", () => openDetail(b.dataset.id, true)));
+    EntityDetail.bindAuto(container);
   }
 
   // Wraps the shared component card but swaps the footer action based on role
