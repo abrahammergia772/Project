@@ -99,14 +99,14 @@ const DepartmentsPage = (() => {
       const el = drawer.body.querySelector("#deptTabContent");
       if (tab === "members") {
         el.innerHTML = detail.members.length ? detail.members.map(m => `
-          <div class="flex items-center gap-12" style="padding:10px 0; border-bottom:1px solid var(--border);">
+          <div class="flex items-center gap-12 clickable-entity" data-entity="member" data-id="${m.id}" style="padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer;">
             ${Components.createAvatar(m.full_name,"sm",m.avatar_color)}
             <div style="flex:1;"><div style="font-size:13.5px; font-weight:600;">${Utils.escapeHtml(m.full_name)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(m.job_title)}</div></div>
             ${Components.createBadge(m.role, Utils.roleColor(m.role))}
           </div>`).join("") : Components.createEmptyState("fa-users-slash", "No members in this department");
       } else if (tab === "projects") {
         el.innerHTML = detail.projects.length ? detail.projects.map(p => `
-          <div class="card" style="padding:14px; margin-bottom:10px;">
+          <div class="card clickable-entity" data-entity="project" data-id="${p.id}" style="padding:14px; margin-bottom:10px; cursor:pointer;">
             <div class="flex items-center justify-between" style="margin-bottom:8px;">
               <b style="font-size:13.5px;">${Utils.escapeHtml(p.title)}</b>
               ${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}
@@ -124,6 +124,7 @@ const DepartmentsPage = (() => {
             ${Components.createBadge(c.status === "resolved" ? "Resolved" : "Open", c.status === "resolved" ? "green" : "yellow")}
           </div>`).join("") : Components.createEmptyState("fa-comments", "No complaints for this department");
       }
+      EntityDetail.bindAuto(el);
     }
     renderDeptTab("members");
     Utils.qsa(".tab", drawer.body).forEach(tab => tab.addEventListener("click", () => {
