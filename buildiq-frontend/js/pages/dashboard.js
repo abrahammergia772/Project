@@ -227,16 +227,18 @@ const DashboardPage = (() => {
     }));
 
     document.getElementById("activeProjectsList").innerHTML = projects.filter(p => p.status === "In Progress").slice(0,4)
-      .map(p => `<div class="flex items-center justify-between" style="padding:10px 0; border-bottom:1px solid var(--border);">
+      .map(p => `<div class="flex items-center justify-between clickable-entity" data-entity="project" data-id="${p.id}" style="padding:10px 0; border-bottom:1px solid var(--border); cursor:pointer;">
         <div><div style="font-weight:600; font-size:13.5px;">${Utils.escapeHtml(p.title)}</div><div style="font-size:11.5px; color:var(--text-muted);">${p.region} · ${p.department}</div></div>
         ${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}
       </div>`).join("");
+    EntityDetail.bindAuto(document.getElementById("activeProjectsList"));
 
     document.getElementById("activityFeed").innerHTML = MockData.auditLogs.slice(0,6).map(l => `
       <div class="activity-item">
         <div class="activity-icon"><i class="fa-solid fa-circle-info"></i></div>
-        <div><div class="activity-text"><b>${Utils.escapeHtml(l.user)}</b> performed ${l.action.replace(/_/g," ").toLowerCase()}</div><div class="activity-time">${Utils.timeAgo(l.timestamp)}</div></div>
+        <div><div class="activity-text"><b class="clickable-entity" data-entity="member" data-id="${(MockData.getMemberByName(l.user)||{}).id||''}" style="cursor:pointer;">${Utils.escapeHtml(l.user)}</b> performed ${l.action.replace(/_/g," ").toLowerCase()}</div><div class="activity-time">${Utils.timeAgo(l.timestamp)}</div></div>
       </div>`).join("");
+    EntityDetail.bindAuto(document.getElementById("activityFeed"));
 
     const deptTable = document.getElementById("deptTable");
     deptTable.innerHTML = `<thead><tr><th>Department</th><th>Head</th><th>Members</th><th>Projects</th><th>AI Health</th></tr></thead>
@@ -316,6 +318,7 @@ const DashboardPage = (() => {
   async function fillAuditor() {
     const anomalies = await API.getAuditAnomalies();
     document.getElementById("anomalyList").innerHTML = anomalies.slice(0,3).map(Components.createAuditCard).join("");
+    EntityDetail.bindAuto(document.getElementById("anomalyList"));
     const buckets = [0,0,0,0,0];
     MockData.auditLogs.forEach(l => { buckets[Math.min(4, Math.floor(l.anomaly_score*5))]++; });
     charts.push(new Chart(document.getElementById("riskDistChart"), {
