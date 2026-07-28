@@ -48,6 +48,10 @@ const MockData = (() => {
       description: "Acts as the primary liaison with clients, managing communication, expectations and satisfaction.",
       scope: ["Client communication", "Contract liaison", "Satisfaction tracking", "Onboarding new clients"],
       budget: 300000 },
+    { id: "dep_9", name: "Workforce & Attendance", head: "Girma Assefa",
+      description: "Supervises daily workforce presence across all sites — taking and verifying attendance for permanent organization staff and daily (casual) workers, and flagging absence patterns to site leadership.",
+      scope: ["Daily attendance supervision", "Organization worker attendance", "Daily/casual worker attendance", "Absence pattern monitoring", "Workforce headcount reporting"],
+      budget: 260000 },
   ];
 
   const skillsPool = ["AutoCAD", "Structural Analysis", "Project Scheduling", "Concrete Works",
@@ -202,6 +206,58 @@ const MockData = (() => {
     p.tasks_done = Math.round(p.tasks_total * (p.progress/100));
   });
 
+  // ---------------- Materials (#5 — bought materials + price per project) ----------------
+  const materialCatalog = [
+    { name: "Portland Cement (50kg bag)", unit: "bag", unitPrice: 12 },
+    { name: "Reinforcement Steel Bar (12mm)", unit: "ton", unitPrice: 980 },
+    { name: "Concrete Blocks", unit: "piece", unitPrice: 0.9 },
+    { name: "Sand (fine, washed)", unit: "m³", unitPrice: 18 },
+    { name: "Aggregate (coarse gravel)", unit: "m³", unitPrice: 22 },
+    { name: "Structural Steel Beam (I-beam)", unit: "piece", unitPrice: 340 },
+    { name: "Plywood Sheets (18mm)", unit: "sheet", unitPrice: 26 },
+    { name: "Electrical Cable (per roll)", unit: "roll", unitPrice: 85 },
+    { name: "PVC Pipes (4-inch)", unit: "piece", unitPrice: 14 },
+    { name: "Paint (exterior, 20L)", unit: "bucket", unitPrice: 62 },
+    { name: "Roofing Sheets (corrugated)", unit: "sheet", unitPrice: 21 },
+    { name: "Glass Panels (tempered)", unit: "panel", unitPrice: 120 },
+    { name: "Ceramic Floor Tiles", unit: "m²", unitPrice: 16 },
+    { name: "HVAC Ducting", unit: "meter", unitPrice: 30 },
+    { name: "Bitumen (asphalt binder)", unit: "ton", unitPrice: 560 },
+  ];
+  const suppliers = ["Sodo Building Materials PLC","Ethio Steel & Cement Supply","Rift Valley Aggregates",
+    "National Hardware Distributors","Blue Nile Electrical Supplies","Abyssinia Construction Trading"];
+
+  const materials = [];
+  let materialSeq = 1;
+  projects.forEach(p => {
+    const itemCount = randInt(4, 8);
+    const shuffled = [...materialCatalog].sort(() => Math.random() - 0.5).slice(0, itemCount);
+    p.materials = shuffled.map(item => {
+      const quantity = randInt(10, 500);
+      const unitPrice = Number((item.unitPrice * (0.92 + Math.random() * 0.16)).toFixed(2));
+      const totalCost = Number((quantity * unitPrice).toFixed(2));
+      return {
+        id: `mat_${materialSeq++}`,
+        project_id: p.id,
+        name: item.name,
+        unit: item.unit,
+        quantity,
+        unit_price: unitPrice,
+        total_cost: totalCost,
+        supplier: randOf(suppliers),
+        purchased_at: new Date(Date.now() - randInt(1, 180) * 86400000).toISOString(),
+        purchased_by: randOf(p.team.length ? p.team : members).full_name,
+      };
+    });
+    p.materials_total_cost = Number(p.materials.reduce((s, m) => s + m.total_cost, 0).toFixed(2));
+  });
+
+  function recalcMaterialsTotal(project) {
+    project.materials_total_cost = Number((project.materials || []).reduce((s, m) => s + m.total_cost, 0).toFixed(2));
+    return project.materials_total_cost;
+  }
+  function nextMaterialId() { return `mat_${materialSeq++}`; }
+
   // ---------------- Tasks (per-assignee, later scored by ai-engine.js) ----------------
   const taskTitlesByCategory = {
     "Site Work": ["Pour foundation slab","Install rebar mesh","Erect scaffolding","Excavate trench line","Compact sub-base layer"],
@@ -244,6 +300,65 @@ const MockData = (() => {
   members.filter(m => m.role === "Engineer" || m.role === "Department Manager").forEach(m => {
     makeTasksFor(m, m.role === "Department Manager" ? randInt(3,5) : randInt(4,8));
   });
+
+  // ---------------- Daily Workers (#1 — casual/day labor, distinct from staff members) ----------------
+  const dailyWorkerTrades = ["Mason","Carpenter","Rebar Fixer","General Laborer","Painter","Electrician's Helper",
+    "Plumber's Helper","Welder","Scaffolder","Site Cleaner"];
+  const dailyWorkers = [];
+  for (let i = 0; i < 30; i++) {
+    const name = `${randOf(firstNames)} ${randOf(lastNames)}`;
+    const project = randOf(projects);
+    dailyWorkers.push({
+      id: `dw_${i+1}`,
+      full_name: name,
+      trade: randOf(dailyWorkerTrades),
+      project_id: project.id,
+      project_title: project.title,
+      department: project.department,
+      daily_rate: randInt(250, 650),
+      phone: `+2519${randInt(10000000,99999999)}`,
+      joined: new Date(Date.now() - randInt(10, 300) * 86400000).toISOString(),
+      avatar_color: Utils.colorFromString(name),
+      status: "Active",
+    });
+  }
+
+  // ---------------- Attendance (#1 & #2 — daily attendance + AI absence ranking) ----------------
+  // Generates the last 30 calendar days of attendance for every staff member (Engineers +
+  // Department Managers, i.e. field-facing roles) and every daily worker. Weekends are
+  // skipped for staff; daily workers can be scheduled any day since site work continues.
+  const ATTENDANCE_DAYS = 30;
+  const attendance = [];
+  let attendanceSeq = 1;
+
+  function isWeekend(date) { const d = date.getDay(); return d === 0 || d === 6; }
+
+  function generateAttendanceFor(person, personType, absenceBias = 0.08) {
+    for (let d = 0; d < ATTENDANCE_DAYS; d++) {
+      const date = new Date(Date.now() - d * 86400000);
+      if (personType === "staff" && isWeekend(date)) continue;
+      const status = Math.random() < absenceBias ? "Absent" : "Present";
+      attendance.push({
+        id: `att_${attendanceSeq++}`,
+        person_id: person.id,
+        person_name: person.full_name,
+        person_type: personType, // "staff" | "daily_worker"
+        department: person.department,
+        project_id: person.project_id || null,
+        project_title: person.project_title || null,
+        date: date.toISOString().slice(0, 10),
+        status, // Present | Absent
+        check_in: status === "Absent" ? null : `0${randInt(6,8)}:${randInt(0,59)}`.slice(0,5),
+        recorded_by: "Workforce & Attendance",
+      });
+    }
+  }
+
+  const fieldStaff = members.filter(m => m.role === "Engineer" || m.role === "Department Manager");
+  fieldStaff.forEach(m => generateAttendanceFor(m, "staff", 0.07));
+  // A handful of workers get a deliberately elevated absence bias so the AI ranking has
+  // clear, believable standouts rather than uniform noise.
+  dailyWorkers.forEach((w, i) => generateAttendanceFor(w, "daily_worker", i < 5 ? 0.32 : 0.09));
 
   // ---------------- Complaints ----------------
   const complaintCategories = ["Material Quality","Payment Delay","Safety Violation","Project Delay",
@@ -384,8 +499,11 @@ const MockData = (() => {
   }
 
   function getMemberById(id) { return members.find(m => m.id === id); }
+  function getMemberByName(name) { return members.find(m => m.full_name === name); }
   function getClientById(id) { return clients.find(c => c.id === id); }
   function getDepartmentByName(name) { return departments.find(d => d.name === name); }
+  function getProjectById(id) { return projects.find(p => p.id === id); }
+  function getDailyWorkerById(id) { return dailyWorkers.find(w => w.id === id); }
 
   // Backfill simple counts onto each department object now that members/projects exist,
   // so any legacy code referencing dept.members / dept.projects still works.
@@ -396,7 +514,9 @@ const MockData = (() => {
 
   return {
     departments, members, clients, projects, tasks, complaints, auditLogs, chatSuggestions,
+    dailyWorkers, attendance, materialCatalog, suppliers,
     chatbotReply, dashboardStats, complaintCategories, DEPARTMENT_ROUTING,
-    getMemberById, getClientById, getDepartmentByName,
+    getMemberById, getMemberByName, getClientById, getDepartmentByName, getProjectById, getDailyWorkerById,
+    recalcMaterialsTotal, nextMaterialId,
   };
 })();
