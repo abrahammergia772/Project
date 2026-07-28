@@ -1,0 +1,43 @@
+/* ============================================================
+   BuildIQ — tasks.css
+   ============================================================ */
+.tasks-toolbar { display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:18px; }
+.priority-list { display:flex; flex-direction:column; gap:10px; }
+.task-row {
+  display:grid; grid-template-columns: 46px 1fr auto auto auto; gap:14px; align-items:center;
+  padding:14px; background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius);
+  transition: border-color var(--t-base), transform var(--t-base);
+}
+.task-row:hover { border-color: rgba(var(--accent-rgb),0.4); transform: translateY(-1px); }
+.task-score-ring {
+  width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+  font-size:12px; font-weight:700; flex-shrink:0;
+}
+.task-main .task-title { font-weight:600; font-size:13.5px; margin-bottom:3px; }
+.task-main .task-meta { font-size:11.5px; color:var(--text-muted); }
+.task-reason { font-size:11.5px; color:var(--accent); margin-top:4px; }
+.task-actions { display:flex; gap:6px; }
+
+.schedule-table-wrap { overflow-x:auto; }
+table.schedule-table { min-width: 760px; }
+table.schedule-table th, table.schedule-table td {
+  border: 1px solid var(--border); padding: 8px; vertical-align: top; font-size: 12.5px; text-align: left;
+}
+table.schedule-table th { background: var(--bg-input); font-size: 11.5px; text-transform: uppercase; color: var(--text-muted); }
+table.schedule-table td.time-col { background: var(--bg-input); font-weight:600; color:var(--text-muted); white-space:nowrap; width: 70px; }
+.sched-cell { min-height: 46px; }
+.sched-block {
+  background: rgba(var(--accent-rgb),0.14); border-left: 3px solid var(--accent);
+  border-radius: 6px; padding: 6px 8px; font-size: 11.5px; cursor: pointer;
+}
+.sched-block.priority-CRITICAL { border-left-color: var(--red); background: rgba(var(--red-rgb),0.14); }
+.sched-block.priority-HIGH { border-left-color: var(--accent); background: rgba(var(--accent-rgb),0.14); }
+.sched-block.priority-MEDIUM { border-left-color: var(--yellow); background: rgba(var(--yellow-rgb),0.14); }
+.sched-block.priority-LOW { border-left-color: var(--text-muted); background: var(--bg-hover); }
+.sched-empty-slot { min-height: 46px; cursor: pointer; border-radius:6px; display:flex; align-items:center; justify-content:center; color: var(--text-muted); font-size: 16px; opacity:0; transition: opacity var(--t-base); }
+.sched-cell:hover .sched-empty-slot { opacity: 0.6; }
+
+@media (max-width: 640px) {
+  .task-row { grid-template-columns: 40px 1fr; grid-template-areas: "ring main" "actions actions"; }
+  .task-actions { grid-area: actions; margin-top:8px; }
+}
