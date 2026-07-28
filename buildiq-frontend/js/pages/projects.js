@@ -88,7 +88,7 @@ const ProjectsPage = (() => {
       container.innerHTML = `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>Project</th><th>Type</th><th>Region</th><th>Progress</th><th>Risk</th><th>Deadline</th><th>Budget</th><th></th></tr></thead>
         <tbody>${list.map(p => `<tr>
-          <td>${Utils.escapeHtml(p.title)}</td><td>${p.type}</td><td>${p.region}</td>
+          <td><span class="clickable-entity" data-entity="project" data-id="${p.id}" style="cursor:pointer; font-weight:600;">${Utils.escapeHtml(p.title)}</span></td><td>${p.type}</td><td>${p.region}</td>
           <td style="width:140px;">${Components.createProgressBar(p.progress, Utils.riskBadgeType(p.delay_risk) === "red" ? "red" : "")}</td>
           <td>${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}</td>
           <td>${Utils.formatDate(p.deadline)}</td><td>${Utils.currency(p.budget)}</td>
@@ -101,6 +101,7 @@ const ProjectsPage = (() => {
     Utils.qsa(".view-project-btn").forEach(b => b.addEventListener("click", () => openProjectDetail(b.dataset.id)));
     Utils.qsa(".analyze-project-btn").forEach(b => b.addEventListener("click", () => runAnalyze(b.dataset.id)));
     Utils.qsa(".gantt-bar").forEach(b => b.addEventListener("click", () => openProjectDetail(b.dataset.id)));
+    EntityDetail.bindAuto(container);
   }
 
   function renderGantt(list) {
@@ -133,36 +134,10 @@ const ProjectsPage = (() => {
     </div></div>`;
   }
 
+  // Delegates to the shared EntityDetail system (#3) so "view project" behaves the
+  // same everywhere in the app — including materials, team, and AI risk analysis tabs.
   function openProjectDetail(id) {
-    const p = allProjects.find(x => x.id === id);
-    if (!p) return;
-    const drawer = Components.createDrawer({
-      side: "right",
-      title: p.title,
-      bodyHtml: `
-        <div class="flex gap-8" style="margin-bottom:14px;">${Components.createBadge(p.type,"blue")}${Components.createBadge(p.region,"gray")}${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}</div>
-        <p style="font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">${Utils.escapeHtml(p.description)}</p>
-        <div class="grid" style="grid-template-columns:repeat(2,1fr); margin-bottom:18px;">
-          <div><div style="font-size:11.5px;color:var(--text-muted);">Budget</div><div style="font-weight:700;">${Utils.currency(p.budget)}</div></div>
-          <div><div style="font-size:11.5px;color:var(--text-muted);">Spent</div><div style="font-weight:700;">${Utils.currency(p.spent)}</div></div>
-          <div><div style="font-size:11.5px;color:var(--text-muted);">Deadline</div><div style="font-weight:700;">${Utils.formatDate(p.deadline)}</div></div>
-          <div><div style="font-size:11.5px;color:var(--text-muted);">Tasks</div><div style="font-weight:700;">${p.tasks_done}/${p.tasks_total}</div></div>
-        </div>
-        ${Components.createProgressBar(p.progress)}
-        <div class="section-title" style="margin-top:20px;"><i class="fa-solid fa-users"></i> Team</div>
-        <div class="flex-col gap-8" style="margin-bottom:18px;">${p.team.map(m => `<div class="flex items-center gap-8">${Components.createAvatar(m.full_name,"sm",m.avatar_color)}<span style="font-size:13px;">${Utils.escapeHtml(m.full_name)}</span>${Components.createBadge(m.role, Utils.roleColor(m.role))}</div>`).join("")}</div>
-        <div class="section-title"><i class="fa-solid fa-brain"></i> AI Risk Analysis</div>
-        <div id="drawerAnalysis"><button class="btn btn-primary btn-block" id="drawerAnalyzeBtn"><i class="fa-solid fa-wand-magic-sparkles"></i> Run AI Analysis</button></div>`,
-    });
-    drawer.body.querySelector("#drawerAnalyzeBtn")?.addEventListener("click", async (e) => {
-      const btn = e.currentTarget;
-      btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Analyzing...`;
-      const result = await API.analyzeProject(p.id);
-      drawer.body.querySelector("#drawerAnalysis").innerHTML = `
-        ${riskGauge(result.delay_probability)}
-        <div class="flex gap-8" style="flex-wrap:wrap; justify-content:center; margin-bottom:14px;">${result.key_risk_factors.map(f => Components.createBadge(f,"gray")).join("")}</div>
-        <div class="card" style="background:var(--bg-input); border-left:3px solid var(--accent);"><p style="font-size:13px; color:var(--text-secondary);">${Utils.escapeHtml(result.groq_explanation)}</p></div>`;
-    });
+    EntityDetail.openProject(id);
   }
 
   async function runAnalyze(id) {
