@@ -44,9 +44,9 @@ const Roles = (() => {
   // ---------------- Reports (#7) ----------------
   // Each role only sees report types relevant to what they're allowed to act on.
   const REPORT_TYPES = {
-    "Super Admin": ["Organization Summary", "Project Progress Summary", "Complaint Analysis", "Audit & Compliance", "Team Performance", "Financial Overview"],
-    "General Manager": ["Organization Summary", "Project Progress Summary", "Complaint Analysis", "Team Performance", "Financial Overview"],
-    "Department Manager": ["Department Performance", "Department Complaint Summary", "Department Team Report"],
+    "Super Admin": ["Organization Summary", "Project Progress Summary", "Complaint Analysis", "Audit & Compliance", "Team Performance", "Financial Overview", "Attendance & Absence Report"],
+    "General Manager": ["Organization Summary", "Project Progress Summary", "Complaint Analysis", "Audit & Compliance", "Team Performance", "Financial Overview", "Attendance & Absence Report"],
+    "Department Manager": ["Department Performance", "Department Complaint Summary", "Department Team Report", "Attendance & Absence Report"],
     "Auditor": ["Audit & Compliance", "Anomaly Summary"],
     "Client": ["My Project Status Report"],
     "Engineer": [],
@@ -72,10 +72,47 @@ const Roles = (() => {
   function canViewTeamTasks(role) { return ORG_WIDE.includes(role) || role === "Department Manager"; }
   function canAssignTasks(role) { return ORG_WIDE.includes(role) || role === "Department Manager"; }
 
+  // ---------------- Materials (project cost tracking) ----------------
+  // Super Admin, General Manager, and the Department Manager who owns the project's
+  // department can add/edit/delete purchased materials on that project.
+  function canManageMaterials(user, project) {
+    if (!user || !project) return false;
+    if (ORG_WIDE.includes(user.role)) return true;
+    return user.role === "Department Manager" && user.department === project.department;
+  }
+
+  // ---------------- Attendance (#1, #2) ----------------
+  // Super Admin, General Manager, and the Workforce & Attendance department manager
+  // can take/view attendance and see the AI absence ranking. Other Department Managers
+  // see attendance for their own department's staff + daily workers (read-only).
+  const WORKFORCE_DEPT = "Workforce & Attendance";
+  function canTakeAttendance(user) {
+    return ORG_WIDE.includes(user.role) || (user.role === "Department Manager" && user.department === WORKFORCE_DEPT);
+  }
+  function canViewAttendance(user) {
+    return ORG_WIDE.includes(user.role) || user.role === "Department Manager" || user.role === "Auditor";
+  }
+  function visibleAttendance(user, allAttendance) {
+    if (ORG_WIDE.includes(user.role) || user.role === "Auditor") return allAttendance;
+    if (user.role === "Department Manager") {
+      if (user.department === WORKFORCE_DEPT) return allAttendance; // workforce dept oversees everyone
+      return allAttendance.filter(a => a.department === user.department);
+    }
+    return [];
+  }
+  function visibleDailyWorkers(user, allWorkers) {
+    if (ORG_WIDE.includes(user.role) || user.role === "Auditor") return allWorkers;
+    if (user.role === "Department Manager") {
+      if (user.department === WORKFORCE_DEPT) return allWorkers;
+      return allWorkers.filter(w => w.department === user.department);
+    }
+    return [];
+  }
+
   // ---------------- Display helpers ----------------
   const ROLE_DESCRIPTIONS = {
     "Super Admin": "Full system access. Manage all users, audit logs, AI models, reports, and system configuration.",
-    "General Manager": "Organization-wide oversight. Full visibility into projects, teams, complaints and reports across every department.",
+    "General Manager": "Organization-wide oversight. Full visibility into projects, teams, complaints, audit logs, and reports across every department.",
     "Department Manager": "Department management. Projects, complaints, team members, and reports for their own department.",
     "Engineer": "Personal access. View assigned tasks, team documents, submit complaints, manage own schedule.",
     "Auditor": "Read-only security access. Audit logs, compliance reports, anomaly review only.",
@@ -88,7 +125,8 @@ const Roles = (() => {
     canViewAllDepartments, canViewOwnDepartmentOnly, visibleDepartments,
     REPORT_TYPES, reportTypesFor, reportScopeLocked,
     visibleProjects, visibleMembers,
-    canViewTeamTasks, canAssignTasks,
+    canViewTeamTasks, canAssignTasks, canManageMaterials,
+    WORKFORCE_DEPT, canTakeAttendance, canViewAttendance, visibleAttendance, visibleDailyWorkers,
     ROLE_DESCRIPTIONS,
   };
 })();
