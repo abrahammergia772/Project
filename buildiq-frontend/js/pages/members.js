@@ -106,7 +106,7 @@ const MembersPage = (() => {
         <thead><tr><th>Name</th><th>Role</th><th>Department</th><th>Projects</th><th>Status</th><th>Joined</th><th>Actions</th></tr></thead>
         <tbody>${list.map(m => `
           <tr>
-            <td><div class="flex items-center gap-8">${Components.createAvatar(m.full_name,"sm",m.avatar_color)}<span>${Utils.escapeHtml(m.full_name)}</span></div></td>
+            <td><div class="flex items-center gap-8 clickable-entity" data-entity="member" data-id="${m.id}" style="cursor:pointer;">${Components.createAvatar(m.full_name,"sm",m.avatar_color)}<span>${Utils.escapeHtml(m.full_name)}</span></div></td>
             <td>${Components.createBadge(m.role, Utils.roleColor(m.role))}</td>
             <td>${Utils.escapeHtml(m.department)}</td>
             <td>${m.projects_count}</td>
@@ -116,35 +116,8 @@ const MembersPage = (() => {
           </tr>`).join("")}</tbody>
       </table></div>`;
     }
-    Utils.qsa(".view-profile-btn").forEach(btn => btn.addEventListener("click", () => openProfile(btn.dataset.id)));
-  }
-
-  function openProfile(id) {
-    const m = allMembers.find(x => x.id === id);
-    if (!m) return;
-    Components.createModal({
-      title: "Member Profile",
-      bodyHtml: `
-        <div class="flex items-center gap-16" style="margin-bottom:18px;">
-          ${Components.createAvatar(m.full_name, "xl", m.avatar_color)}
-          <div>
-            <div style="font-size:18px; font-weight:700;">${Utils.escapeHtml(m.full_name)}</div>
-            <div style="color:var(--text-muted); font-size:13px;">${Utils.escapeHtml(m.job_title)} · ${Utils.escapeHtml(m.department)}</div>
-            <div class="flex gap-8" style="margin-top:8px;">${Components.createBadge(m.role, Utils.roleColor(m.role))}${Components.createBadge(m.status, m.status==="Active"?"green":"yellow",true)}</div>
-          </div>
-        </div>
-        <div class="grid" style="grid-template-columns:repeat(3,1fr); text-align:center; margin-bottom:16px;">
-          <div><div style="font-weight:700; font-size:18px;">${m.projects_count}</div><div style="font-size:11.5px;color:var(--text-muted);">Projects</div></div>
-          <div><div style="font-weight:700; font-size:18px;">${m.on_time_pct}%</div><div style="font-size:11.5px;color:var(--text-muted);">On-time</div></div>
-          <div><div style="font-weight:700; font-size:18px;">${m.experience_years}y</div><div style="font-size:11.5px;color:var(--text-muted);">Experience</div></div>
-        </div>
-        <div class="field"><label>Skills</label><div class="flex gap-8" style="flex-wrap:wrap;">${m.skills.map(s=>Components.createBadge(s,"gray")).join("")}</div></div>
-        <div class="field"><label>Email</label><div>${Utils.escapeHtml(m.email)}</div></div>
-        <div class="field"><label>Phone</label><div>${Utils.escapeHtml(m.phone)}</div></div>
-        <div class="field"><label>Joined</label><div>${Utils.formatDate(m.joined)}</div></div>`,
-      actionsHtml: `<button class="btn btn-secondary" id="closeProfileBtn">Close</button><button class="btn btn-primary"><i class="fa-solid fa-envelope"></i> Message</button>`,
-    });
-    setTimeout(() => document.getElementById("closeProfileBtn")?.addEventListener("click", () => Utils.qs(".modal-overlay")?.remove()), 0);
+    Utils.qsa(".view-profile-btn").forEach(btn => btn.addEventListener("click", () => EntityDetail.openMember(btn.dataset.id)));
+    EntityDetail.bindAuto(container);
   }
 
   function openSmartSearchDrawer() {
