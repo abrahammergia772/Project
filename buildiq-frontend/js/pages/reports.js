@@ -97,16 +97,35 @@ const ReportsPage = (() => {
       <div style="font-size:13.5px; line-height:1.8; color:var(--text-secondary);">
         <h4 style="color:var(--text-primary); margin-bottom:8px;">Executive Summary</h4>
         <p style="margin-bottom:16px;">${Utils.escapeHtml(result.content)}</p>
+        ${type === "Attendance & Absence Report" ? renderAbsenceRankingTable(result.rankedAbsences) : `
         <h4 style="color:var(--text-primary); margin-bottom:8px;">Key Metrics</h4>
         <div class="grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
           <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.projects ?? MockData.projects.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Projects</div></div>
           <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.complaints ?? MockData.complaints.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Complaints</div></div>
           <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.members ?? MockData.members.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Team Members</div></div>
-        </div>
+        </div>`}
       </div>`;
+    EntityDetail.bindAuto(preview);
     saved.unshift({ name: type, type, date: new Date().toISOString(), by: user.name });
     renderSaved(user);
     Components.createToast("Report generated successfully.", "success");
+  }
+
+  function renderAbsenceRankingTable(ranked = []) {
+    if (!ranked.length) return `<p style="color:var(--text-muted);">No attendance data available for this scope.</p>`;
+    return `
+      <h4 style="color:var(--text-primary); margin-bottom:8px;">AI Absence Ranking</h4>
+      <div class="table-wrap" style="margin-bottom:8px;"><table class="data-table">
+        <thead><tr><th>#</th><th>Person</th><th>Type</th><th>Absence Rate</th><th>AI Risk</th></tr></thead>
+        <tbody>${ranked.slice(0,15).map((r,i) => `
+          <tr>
+            <td>${i+1}</td>
+            <td><span class="clickable-entity" data-entity="${r.person_type === 'daily_worker' ? 'daily_worker' : 'member'}" data-id="${r.person_id}" style="cursor:pointer; font-weight:600;">${Utils.escapeHtml(r.person_name)}</span></td>
+            <td>${Components.createBadge(r.person_type === "daily_worker" ? "Daily Worker" : "Staff", "gray")}</td>
+            <td>${r.absence_rate}%</td>
+            <td>${Components.createBadge(r.ai_risk, Utils.priorityBadgeType(r.ai_risk))}</td>
+          </tr>`).join("")}</tbody>
+      </table></div>`;
   }
 
   return { init };
