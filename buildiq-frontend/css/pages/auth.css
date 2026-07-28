@@ -1,0 +1,163 @@
+/* ============================================================
+   BuildIQ — auth.css (index.html — Login & Signup)
+   ============================================================ */
+
+.auth-shell {
+  min-height: 100vh;
+  display: flex;
+  position: relative;
+}
+
+/* ---------- Left panel ---------- */
+.auth-left {
+  width: 40%;
+  min-width: 420px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column; justify-content: space-between;
+  padding: 44px 48px;
+  position: relative; overflow: hidden;
+}
+.auth-left-top .auth-logo { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.auth-left-top .auth-logo img { width: 42px; height: 42px; }
+.auth-left-top .auth-logo span { font-family: var(--font-display); font-size: 22px; font-weight: 700; }
+.auth-tagline { color: var(--text-secondary); font-size: 14.5px; max-width: 320px; }
+
+.construction-scene {
+  position: relative;
+  height: 220px;
+  margin: 30px 0;
+}
+.blueprint-grid {
+  position: absolute; inset: 0; opacity: 0.5;
+  background-image:
+    linear-gradient(rgba(59,130,246,0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.15) 1px, transparent 1px);
+  background-size: 24px 24px;
+  border-radius: var(--radius);
+}
+.crane {
+  position: absolute; bottom: 0; left: 20px; width: 4px; height: 160px; background: var(--accent);
+}
+.crane::before { content:""; position:absolute; top:0; left:-70px; width:150px; height:4px; background:var(--accent); }
+.crane::after { content:""; position:absolute; top:0; left:-8px; width:2px; height:60px; background: var(--accent-hover); animation: craneSway 4s ease-in-out infinite alternate; transform-origin: top; }
+@keyframes craneSway { from { transform: rotate(-3deg);} to { transform: rotate(3deg);} }
+.beam1, .beam2, .beam3 {
+  position: absolute; bottom: 0; background: var(--blue); opacity: 0.85; border-radius: 3px 3px 0 0;
+}
+.beam1 { left: 90px; width: 34px; height: 90px; }
+.beam2 { left: 140px; width: 34px; height: 130px; }
+.beam3 { left: 190px; width: 34px; height: 60px; }
+.beam1, .beam2, .beam3 { animation: riseUp 1s var(--ease-out) both; }
+.beam2 { animation-delay: 0.15s; }
+.beam3 { animation-delay: 0.3s; }
+@keyframes riseUp { from { transform: scaleY(0); transform-origin: bottom; opacity:0; } to { transform: scaleY(1); opacity:1; } }
+
+.feature-list { display: flex; flex-direction: column; gap: 16px; margin: 10px 0 30px; }
+.feature-item { display: flex; align-items: center; gap: 14px; }
+.feature-item .f-icon {
+  width: 40px; height: 40px; border-radius: var(--radius-sm);
+  display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  background: rgba(var(--accent-rgb),0.14); color: var(--accent);
+}
+.feature-item span.f-text { font-size: 13.5px; font-weight: 600; }
+
+.auth-left-bottom { font-size: 12.5px; color: var(--text-muted); border-top: 1px solid var(--border); padding-top: 16px; }
+
+/* ---------- Right panel ---------- */
+.auth-right {
+  flex: 1;
+  display: flex; align-items: center; justify-content: center;
+  padding: 32px 24px;
+  position: relative;
+}
+.auth-form-box { width: 100%; max-width: 420px; }
+.auth-mobile-logo { display: none; }
+
+.auth-heading h2 { font-size: 24px; margin-bottom: 4px; }
+.auth-heading p { color: var(--text-secondary); font-size: 14px; margin-bottom: 28px; }
+
+.forgot-link { font-size: 12.5px; color: var(--accent); text-align: right; display: block; margin: -8px 0 18px; }
+.forgot-link:hover { text-decoration: underline; }
+
+.divider-text {
+  display: flex; align-items: center; gap: 12px; color: var(--text-muted); font-size: 12px;
+  margin: 20px 0;
+}
+.divider-text::before, .divider-text::after { content: ""; flex: 1; height: 1px; background: var(--border); }
+
+.role-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
+.role-chip {
+  padding: 7px 14px; border-radius: 100px; border: 1px solid var(--border);
+  font-size: 12.5px; font-weight: 600; color: var(--text-secondary); background: var(--bg-input);
+  transition: all var(--t-base);
+}
+.role-chip:hover { border-color: var(--accent); color: var(--accent); }
+
+.switch-link { text-align: center; font-size: 13.5px; color: var(--text-secondary); margin-top: 20px; }
+.switch-link a { color: var(--accent); font-weight: 600; }
+.switch-link a:hover { text-decoration: underline; }
+
+/* ---------- Signup steps ---------- */
+.step-dots { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 26px; }
+.step-dot {
+  width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  background: var(--bg-input); border: 1px solid var(--border); color: var(--text-muted); font-size: 12.5px; font-weight: 700;
+  transition: all var(--t-base);
+}
+.step-dot.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.step-dot.done { background: rgba(var(--green-rgb),0.16); border-color: var(--green); color: var(--green); }
+.step-line { width: 34px; height: 2px; background: var(--border); }
+.step-line.done { background: var(--green); }
+
+.signup-step { display: none; }
+.signup-step.active { display: block; animation: pageFadeIn var(--t-base) var(--ease-out) both; }
+
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+
+.avatar-upload { display: flex; flex-direction: column; align-items: center; gap: 10px; margin-bottom: 20px; }
+.avatar-upload-circle {
+  width: 84px; height: 84px; border-radius: 50%; background: var(--bg-input); border: 2px dashed var(--border);
+  display: flex; align-items: center; justify-content: center; color: var(--text-muted); font-size: 22px; cursor: pointer; overflow: hidden;
+}
+.avatar-upload-circle img { width: 100%; height: 100%; object-fit: cover; }
+
+/* Role card selector */
+.role-card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 18px; }
+.role-card {
+  border: 1.5px solid var(--border); border-radius: var(--radius); padding: 14px;
+  background: var(--bg-input); cursor: pointer; transition: all var(--t-base);
+  display: flex; flex-direction: column; gap: 6px; text-align: left;
+}
+.role-card i.role-icon { font-size: 18px; margin-bottom: 2px; }
+.role-card .role-name { font-weight: 700; font-size: 13.5px; }
+.role-card .role-desc { font-size: 11.5px; color: var(--text-muted); line-height: 1.4; }
+.role-card[data-role="Super Admin"] i { color: var(--accent); }
+.role-card[data-role="Manager"] i { color: var(--blue); }
+.role-card[data-role="Engineer"] i { color: var(--green); }
+.role-card[data-role="Auditor"] i { color: var(--purple); }
+.role-card[data-role="Super Admin"].selected { border-color: var(--accent); background: rgba(var(--accent-rgb),0.08); }
+.role-card[data-role="Manager"].selected { border-color: var(--blue); background: rgba(var(--blue-rgb),0.08); }
+.role-card[data-role="Engineer"].selected { border-color: var(--green); background: rgba(var(--green-rgb),0.08); }
+.role-card[data-role="Auditor"].selected { border-color: var(--purple); background: rgba(var(--purple-rgb),0.08); }
+
+/* Password strength meter */
+.strength-meter { display: flex; gap: 4px; margin: 8px 0 10px; }
+.strength-seg { height: 5px; flex: 1; border-radius: 4px; background: var(--bg-input); transition: background var(--t-base); }
+.strength-label { font-size: 12px; font-weight: 600; margin-bottom: 10px; }
+.req-list { display: flex; flex-direction: column; gap: 5px; margin-bottom: 18px; }
+.req-item { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; }
+.req-item.met { color: var(--green); }
+.req-item i { font-size: 11px; }
+
+.step-nav { display: flex; gap: 10px; margin-top: 6px; }
+
+@media (max-width: 900px) {
+  .auth-left { display: none; }
+  .auth-mobile-logo {
+    display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 26px;
+  }
+  .auth-mobile-logo img { width: 34px; height: 34px; }
+  .auth-mobile-logo span { font-family: var(--font-display); font-weight: 700; font-size: 19px; }
+  .role-card-grid, .two-col { grid-template-columns: 1fr; }
+}

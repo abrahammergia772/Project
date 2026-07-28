@@ -1,0 +1,13 @@
+/* ============================================================
+   BuildIQ — complaints.css
+   ============================================================ */
+.complaints-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 18px; }
+.complaints-layout { display: grid; grid-template-columns: 1fr 320px; gap: 18px; align-items: start; }
+.complaints-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; }
+.trend-panel { position: sticky; top: 76px; }
+
+@media (max-width: 1100px) {
+  .complaints-stats { grid-template-columns: repeat(2,1fr); }
+  .complaints-layout { grid-template-columns: 1fr; }
+  .trend-panel { position: static; }
+}
