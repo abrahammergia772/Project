@@ -19,6 +19,7 @@ const Shell = (() => {
       { key: "projects", label: "Projects", icon: "fa-diagram-project", href: "projects.html" },
       { key: "tasks", label: "Tasks", icon: "fa-list-check", href: "tasks.html" },
       { key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", href: "complaints.html", badgeKey: "open_complaints" },
+      { key: "attendance", label: "Attendance", icon: "fa-clipboard-user", href: "attendance.html", badgeKey: "absent_today" },
     ]},
     { label: "AI INTELLIGENCE", items: [
       { key: "audit", label: "Audit Logs", icon: "fa-shield-halved", href: "audit.html", badgeKey: "audit_flags" },
@@ -36,9 +37,12 @@ const Shell = (() => {
   function badgeCounts(user) {
     if (BUILDIQ_CONFIG.MOCK_MODE) {
       const scopedComplaints = Roles.visibleComplaints(user, MockData.complaints);
+      const scopedAttendance = Roles.visibleAttendance(user, MockData.attendance);
+      const today = new Date().toISOString().slice(0, 10);
       return {
         open_complaints: scopedComplaints.filter(c => c.status !== "resolved").length,
         audit_flags: MockData.auditLogs.filter(l => l.is_flagged).length,
+        absent_today: scopedAttendance.filter(a => a.date === today && a.status === "Absent").length,
       };
     }
     return {};
