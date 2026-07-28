@@ -69,17 +69,22 @@ const AuditPage = (() => {
       const anomalies = logs.filter(l => l.is_flagged).sort((a,b)=>b.anomaly_score-a.anomaly_score);
       el.innerHTML = anomalies.length ? `<div class="audit-cards-grid">${anomalies.map(Components.createAuditCard).join("")}</div>` : Components.createEmptyState("fa-shield-halved","No anomalies detected");
       bindAuditActions();
+      EntityDetail.bindAuto(el);
     } else if (key === "logs") {
       el.innerHTML = `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>User</th><th>Action</th><th>Resource</th><th>Time</th><th>Risk</th><th>Score</th></tr></thead>
-        <tbody>${logs.map(l => `<tr>
-          <td><div class="flex items-center gap-8">${Components.createAvatar(l.user,"sm")}<span>${Utils.escapeHtml(l.user)}</span></div></td>
+        <tbody>${logs.map(l => {
+          const member = MockData.getMemberByName(l.user);
+          return `<tr>
+          <td><div class="flex items-center gap-8 ${member ? 'clickable-entity' : ''}" ${member ? `data-entity="member" data-id="${member.id}"` : ""} style="${member ? 'cursor:pointer;' : ''}">${Components.createAvatar(l.user,"sm")}<span>${Utils.escapeHtml(l.user)}</span></div></td>
           <td>${Components.createBadge(l.action, (l.action==="BULK_DELETE"||l.action==="EXPORT_DATA")?"red":"gray")}</td>
           <td>${Utils.escapeHtml(l.resource)}</td>
           <td>${Utils.formatDate(l.timestamp)}</td>
           <td>${Components.createBadge(l.risk_level, Utils.riskBadgeType(l.risk_level))}</td>
           <td class="mono">${(l.anomaly_score*100).toFixed(1)}%</td>
-        </tr>`).join("")}</tbody></table></div>`;
+        </tr>`;
+        }).join("")}</tbody></table></div>`;
+      EntityDetail.bindAuto(el);
     } else if (key === "analytics") {
       el.innerHTML = `
         <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px; margin-bottom:16px;">
