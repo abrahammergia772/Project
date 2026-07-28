@@ -176,6 +176,55 @@ const API = (() => {
       const health = AIEngine.departmentHealth(dept, MockData.projects, MockData.members, MockData.complaints);
       return { ...dept, members: deptMembers, projects: deptProjects, complaints: deptComplaints, health };
     },
+    async addMaterial(projectId, payload) {
+      await wait(400);
+      const project = MockData.getProjectById(projectId);
+      if (!project) throw new Error("Project not found");
+      const quantity = Number(payload.quantity) || 0;
+      const unitPrice = Number(payload.unit_price) || 0;
+      const material = {
+        id: MockData.nextMaterialId(),
+        project_id: projectId,
+        name: payload.name,
+        unit: payload.unit || "unit",
+        quantity,
+        unit_price: unitPrice,
+        total_cost: Number((quantity * unitPrice).toFixed(2)),
+        supplier: payload.supplier || "Unspecified",
+        purchased_at: payload.purchased_at ? new Date(payload.purchased_at).toISOString() : new Date().toISOString(),
+        purchased_by: payload.purchased_by || (Auth.getUser() || {}).name || "Unknown",
+      };
+      project.materials = project.materials || [];
+      project.materials.unshift(material);
+      MockData.recalcMaterialsTotal(project);
+      return material;
+    },
+    async updateMaterial(projectId, materialId, payload) {
+      await wait(400);
+      const project = MockData.getProjectById(projectId);
+      if (!project) throw new Error("Project not found");
+      const material = (project.materials || []).find(m => m.id === materialId);
+      if (!material) throw new Error("Material not found");
+      Object.assign(material, {
+        name: payload.name ?? material.name,
+        unit: payload.unit ?? material.unit,
+        quantity: payload.quantity !== undefined ? Number(payload.quantity) : material.quantity,
+        unit_price: payload.unit_price !== undefined ? Number(payload.unit_price) : material.unit_price,
+        supplier: payload.supplier ?? material.supplier,
+        purchased_at: payload.purchased_at ? new Date(payload.purchased_at).toISOString() : material.purchased_at,
+      });
+      material.total_cost = Number((material.quantity * material.unit_price).toFixed(2));
+      MockData.recalcMaterialsTotal(project);
+      return material;
+    },
+    async deleteMaterial(projectId, materialId) {
+      await wait(300);
+      const project = MockData.getProjectById(projectId);
+      if (!project) throw new Error("Project not found");
+      project.materials = (project.materials || []).filter(m => m.id !== materialId);
+      MockData.recalcMaterialsTotal(project);
+      return { ok: true };
+    },
     async tasks(params = {}) {
       await wait();
       let list = [...MockData.tasks];
@@ -246,8 +295,20 @@ const API = (() => {
         complaints = complaints.filter(c => c.department === scope);
         members = members.filter(m => m.department === scope);
       }
-      const content = AIEngine.buildReportNarrative(payload.type, scope, { projects, complaints, members, department: user.department });
-      return { title: payload.type, generated_at: new Date().toISOString(), content, stats: { projects: projects.length, complaints: complaints.length, members: members.length } };
+
+      let rankedAbsences = [];
+      if (payload.type === "Attendance & Absence Report") {
+        const attendanceScope = Roles.visibleAttendance(user, MockData.attendance)
+          .filter(a => scope === "Entire Organization" || !Roles.ORG_WIDE.includes(user.role) ? true : a.department === scope);
+        rankedAbsences = AIEngine.rankAbsences(attendanceScope);
+      }
+
+      const content = AIEngine.buildReportNarrative(payload.type, scope, { projects, complaints, members, department: user.department, rankedAbsences });
+      return {
+        title: payload.type, generated_at: new Date().toISOString(), content,
+        stats: { projects: projects.length, complaints: complaints.length, members: members.length },
+        rankedAbsences,
+      };
     },
   };
 
@@ -274,6 +335,11 @@ const API = (() => {
     // Departments
     getDepartments: () => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve(MockData.departments) : request("/departments"),
     getDepartmentDetail: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.departmentDetail(id) : request(`/departments/${id}`),
+
+    // Materials (project cost tracking)
+    addMaterial: (projectId, payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.addMaterial(projectId, payload) : request(`/projects/${projectId}/materials`, { method: "POST", body: payload }),
+    updateMaterial: (projectId, materialId, payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.updateMaterial(projectId, materialId, payload) : request(`/projects/${projectId}/materials/${materialId}`, { method: "PUT", body: payload }),
+    deleteMaterial: (projectId, materialId) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.deleteMaterial(projectId, materialId) : request(`/projects/${projectId}/materials/${materialId}`, { method: "DELETE" }),
 
     // Projects
     getProjects: (params) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.projects(params) : request("/projects", { params }),
