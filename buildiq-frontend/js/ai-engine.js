@@ -136,6 +136,72 @@ const AIEngine = (() => {
     return `${urgency}${base}`;
   }
 
+  // ---------------- #2 AI absence ranking ----------------
+  // Ranks people (staff or daily workers) by an absence-risk score blending:
+  // absence rate over the window, a recency-weighted "recent absences" signal
+  // (absences in the last 7 days count extra), and late-arrival frequency.
+  function rankAbsences(attendanceRecords, windowDays = 30) {
+    const byPerson = {};
+    const cutoff = Date.now() - windowDays * 86400000;
+    const recentCutoff = Date.now() - 7 * 86400000;
+
+    attendanceRecords.forEach(rec => {
+      const recDate = new Date(rec.date).getTime();
+      if (recDate < cutoff) return;
+      if (!byPerson[rec.person_id]) {
+        byPerson[rec.person_id] = {
+          person_id: rec.person_id, person_name: rec.person_name, person_type: rec.person_type,
+          department: rec.department, project_title: rec.project_title,
+          total: 0, absent: 0, present: 0, recentAbsent: 0,
+        };
+      }
+      const p = byPerson[rec.person_id];
+      p.total++;
+      if (rec.status === "Absent") { p.absent++; if (recDate >= recentCutoff) p.recentAbsent++; }
+      else p.present++;
+    });
+
+    const ranked = Object.values(byPerson).map(p => {
+      const absenceRate = p.total ? p.absent / p.total : 0;
+      // Weighted score 0-100: absence rate dominates, recent absences add urgency
+      const score = Math.min(100, Math.round(
+        absenceRate * 80 +
+        (p.recentAbsent / Math.max(1, Math.min(p.total, 7))) * 20
+      ));
+      const risk = score >= 55 ? "CRITICAL" : score >= 35 ? "HIGH" : score >= 15 ? "MEDIUM" : "LOW";
+      const reasons = [];
+      if (p.absent) reasons.push(`${p.absent} absence${p.absent>1?"s":""} in last ${windowDays}d`);
+      if (p.recentAbsent) reasons.push(`${p.recentAbsent} in the last 7 days`);
+      return {
+        ...p,
+        absence_rate: Math.round(absenceRate * 100),
+        ai_score: score,
+        ai_risk: risk,
+        ai_reason: reasons.length ? reasons.join(" · ") : "consistent attendance",
+      };
+    }).sort((a,b) => b.ai_score - a.ai_score);
+
+    return ranked;
+  }
+
+  function buildAttendanceReportNarrative(rankedAbsences, scopeLabel = "the organization") {
+    const critical = rankedAbsences.filter(r => r.ai_risk === "CRITICAL");
+    const high = rankedAbsences.filter(r => r.ai_risk === "HIGH");
+    const totalFlagged = critical.length + high.length;
+    if (!rankedAbsences.length) return `No attendance data is available for ${scopeLabel} in the selected period.`;
+    let text = `Attendance analysis for ${scopeLabel} over the selected period: ${totalFlagged} of ${rankedAbsences.length} tracked individual(s) show elevated absence risk. `;
+    if (critical.length) {
+      text += `${critical.length} flagged CRITICAL — most notably ${critical.slice(0,3).map(r => `${r.person_name} (${r.absence_rate}% absence rate)`).join(", ")}. `;
+    }
+    if (high.length) {
+      text += `${high.length} flagged HIGH risk and should be monitored closely. `;
+    }
+    text += totalFlagged
+      ? "Recommend a direct check-in with the flagged individuals and reviewing whether daily worker replacements are needed to protect site schedules."
+      : "Attendance patterns are healthy across the board with no significant absence risk detected.";
+    return text;
+  }
+
   // ---------------- #7 Role-aware AI report narrative ----------------
   function buildReportNarrative(type, scope, ctx) {
     const { projects = [], complaints = [], members = [], department } = ctx;
@@ -160,8 +226,15 @@ const AIEngine = (() => {
     if (type === "Audit & Compliance" || type === "Anomaly Summary") {
       return `Audit intelligence summary generated from the dual-model (Isolation Forest + Random Forest) anomaly detection pipeline. Review the Audit Intelligence page for full anomaly-level detail and recommended actions.`;
     }
+    if (type === "Attendance & Absence Report") {
+      const ranked = ctx.rankedAbsences || [];
+      return buildAttendanceReportNarrative(ranked, scope);
+    }
     return `This AI-generated summary covers ${scope} across ${projects.length} project(s), ${complaints.length} complaint(s), and ${members.length} team member(s) currently in view.`;
   }
 
-  return { scoreTask, prioritizeTasks, autoSchedule, WORK_DAYS, SLOTS, departmentHealth, suggestComplaintSolution, buildReportNarrative };
+  return {
+    scoreTask, prioritizeTasks, autoSchedule, WORK_DAYS, SLOTS, departmentHealth,
+    suggestComplaintSolution, buildReportNarrative, rankAbsences, buildAttendanceReportNarrative,
+  };
 })();
