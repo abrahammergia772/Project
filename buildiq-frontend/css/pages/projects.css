@@ -20,3 +20,60 @@
   .projects-toolbar { flex-direction: column; align-items: stretch; }
   .gantt-row, .gantt-months { grid-template-columns: 120px 1fr; }
 }
+
+/* ---------- Project manager ---------- */
+.project-manager-row {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 9px 11px; margin-bottom: 12px;
+  border-radius: var(--radius);
+  background: rgba(var(--accent-rgb), 0.06);
+  border: 1px solid rgba(var(--accent-rgb), 0.18);
+}
+.pm-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .3px; color: var(--accent);
+}
+.pm-label.pm-unassigned { color: var(--yellow); }
+.pm-name { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; }
+.pm-name b { font-size: 12.5px; color: var(--text-primary); font-weight: 600; }
+
+/* Manager block inside the project detail drawer */
+.detail-manager-card {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 12px; flex-wrap: wrap; padding: 13px 14px; margin-bottom: 16px;
+  border-radius: var(--radius); background: var(--bg-input);
+  border-left: 3px solid var(--accent);
+}
+.dm-left { display: flex; flex-direction: column; gap: 8px; }
+.dm-label {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .3px; color: var(--accent);
+}
+.dm-person { display: inline-flex; align-items: center; gap: 9px; }
+.dm-person span { display: flex; flex-direction: column; }
+.dm-person b { font-size: 13.5px; color: var(--text-primary); }
+.dm-person small { font-size: 11.5px; color: var(--text-muted); }
+.dm-unassigned { font-size: 13px; color: var(--yellow); font-weight: 600; }
+
+/* ---------- Member picker (new project / add engineers) ---------- */
+.member-picker {
+  max-height: 260px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-input); padding: 6px;
+}
+.member-pick {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; border-radius: var(--radius);
+  cursor: pointer; transition: background var(--t-base);
+}
+.member-pick:hover { background: var(--bg-hover); }
+.member-pick input { accent-color: var(--accent); width: 16px; height: 16px; flex-shrink: 0; }
+.member-pick span { display: flex; flex-direction: column; min-width: 0; }
+.member-pick b { font-size: 13px; color: var(--text-primary); font-weight: 600; }
+.member-pick small { font-size: 11.5px; color: var(--text-muted); }
+.picker-empty { padding: 22px; text-align: center; font-size: 12.5px; color: var(--text-muted); }
+
+/* ---------- Department admin actions ---------- */
+.dept-admin-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }

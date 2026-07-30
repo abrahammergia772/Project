@@ -1,0 +1,30 @@
+# Render deployment for the BuildIQ API.
+# Set the secrets (SECRET_KEY, DATABASE_URL, SUPABASE_*, GROQ_API_KEY) in the
+# Render dashboard rather than committing them here.
+services:
+  - type: web
+    name: buildiq-api
+    runtime: python
+    rootDir: buildiq-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      - key: PYTHON_VERSION
+        value: "3.13"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SEED_ON_STARTUP
+        value: "true"

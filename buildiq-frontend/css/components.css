@@ -132,39 +132,101 @@
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 18px 20px;
+  padding: 16px 18px 15px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
   position: relative;
   overflow: hidden;
+  min-width: 0;                 /* lets children shrink instead of overflowing */
+  text-decoration: none;
+  color: inherit;
+  transition: transform var(--t-base), border-color var(--t-base), box-shadow var(--t-base);
 }
+/* Coloured accent bar keeps each card visually distinct at a glance */
+.stat-card .stat-accent {
+  position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--stat-color);
+  opacity: .85;
+}
+.stat-card::after {                        /* soft tint in the corner */
+  content: ""; position: absolute; top: -34px; right: -34px;
+  width: 96px; height: 96px; border-radius: 50%;
+  background: rgba(var(--stat-rgb), 0.10);
+  pointer-events: none;
+}
+.stat-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
 .stat-card .stat-icon {
   width: 38px; height: 38px;
   border-radius: var(--radius-sm);
   display: flex; align-items: center; justify-content: center;
-  font-size: 16px;
-  margin-bottom: 4px;
+  font-size: 16px; flex-shrink: 0;
+  background: rgba(var(--stat-rgb), 0.16);
+  color: var(--stat-color);
 }
 .stat-card .stat-value {
   font-family: var(--font-display);
   font-size: 28px;
   font-weight: 700;
   letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--text-primary);
+  /* Never clip: shrink, wrap as a last resort, but keep it readable */
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
+.stat-card .stat-value.md { font-size: 24px; }
+.stat-card .stat-value.sm { font-size: 20px; }
+.stat-card .stat-value.xs { font-size: 17px; }
 .stat-card .stat-label {
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--text-secondary);
+  line-height: 1.35;
+  /* Show up to two lines rather than truncating a long label */
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 .stat-card .stat-trend {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11.5px;
+  font-weight: 700;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  padding: 3px 8px;
+  border-radius: 100px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
-.stat-trend.up { color: var(--green); }
-.stat-trend.down { color: var(--red); }
+.stat-trend.up { color: var(--green); background: rgba(var(--green-rgb), 0.14); }
+.stat-trend.down { color: var(--red); background: rgba(var(--red-rgb), 0.14); }
+
+/* Clickable cards */
+.stat-card.is-clickable { cursor: pointer; }
+.stat-card.is-clickable:hover,
+.stat-card.is-clickable:focus-visible {
+  transform: translateY(-3px);
+  border-color: rgba(var(--stat-rgb), 0.55);
+  box-shadow: 0 12px 28px rgba(0,0,0,0.28);
+  outline: none;
+}
+.stat-go {
+  display: inline-flex; align-items: center; gap: 6px;
+  margin-top: 2px;
+  font-size: 11.5px; font-weight: 600;
+  color: var(--stat-color);
+  opacity: 0; transform: translateY(-3px);
+  transition: opacity var(--t-base), transform var(--t-base);
+}
+.stat-card.is-clickable:hover .stat-go,
+.stat-card.is-clickable:focus-visible .stat-go { opacity: 1; transform: translateY(0); }
+/* Touch devices have no hover, so keep the call-to-action permanently visible */
+@media (hover: none) {
+  .stat-go { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .stat-card, .stat-go { transition: none; }
+  .stat-card.is-clickable:hover { transform: none; }
+}
 
 /* ---------- Badges ---------- */
 .badge {
@@ -444,3 +506,114 @@ textarea.input { resize: vertical; min-height: 90px; }
   font-size: 15px; font-weight: 700; margin-bottom: 14px; display: flex; align-items: center; gap: 8px;
 }
 .divider { height: 1px; background: var(--border); border: none; margin: 16px 0; }
+
+/* ---------- Document dropzone ---------- */
+.doc-dropzone {
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  padding: 26px; margin-bottom: 18px; cursor: pointer;
+  border: 2px dashed var(--border); border-radius: var(--radius-lg);
+  background: var(--bg-card); color: var(--text-muted);
+  transition: border-color var(--t-base), background var(--t-base), color var(--t-base);
+}
+.doc-dropzone:hover, .doc-dropzone.dragging {
+  border-color: var(--accent); background: rgba(var(--accent-rgb), 0.06); color: var(--text-secondary);
+}
+.doc-dropzone i { font-size: 26px; color: var(--accent); }
+.doc-dropzone div { display: flex; flex-direction: column; gap: 2px; }
+.doc-dropzone b { font-size: 13.5px; color: var(--text-primary); font-weight: 600; }
+.doc-dropzone span { font-size: 12px; }
+
+/* ---------- Combobox: dropdown + free typing ---------- */
+.typed-input { width: 100%; }
+/* The native datalist arrow is replaced by our own chevron button, which is
+   keyboard-accessible and styled consistently across browsers. */
+.combo input[list]::-webkit-calendar-picker-indicator { opacity: 0; display: none !important; }
+.combo { position: relative; display: block; }
+.combo input[list] { width: 100%; padding-right: 38px; }
+.combo-toggle {
+  position: absolute; top: 0; right: 0; height: 100%; width: 34px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer;
+  color: var(--text-muted); font-size: 12px;
+  transition: color var(--t-base), transform var(--t-base);
+}
+.combo-toggle:hover { color: var(--text-primary); }
+.combo.open .combo-toggle { color: var(--accent); transform: rotate(180deg); }
+.combo-panel {
+  display: none; position: absolute; top: calc(100% + 5px); left: 0; right: 0;
+  max-height: 232px; overflow-y: auto; z-index: 400;
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: 0 14px 34px rgba(0,0,0,0.34);
+  padding: 5px;
+}
+.combo.open .combo-panel { display: block; }
+.combo-opt {
+  display: flex; align-items: baseline; gap: 8px; justify-content: space-between;
+  padding: 8px 10px; border-radius: 6px; cursor: pointer;
+  font-size: 13px; color: var(--text-primary);
+  transition: background var(--t-base);
+}
+.combo-opt:hover, .combo-opt.active { background: var(--bg-hover); }
+.combo-opt.active { box-shadow: inset 2px 0 0 var(--accent); }
+.combo-opt small { font-size: 11px; color: var(--text-muted); white-space: nowrap; }
+.combo-empty { padding: 12px 10px; font-size: 12px; color: var(--text-muted); text-align: center; }
+
+/* Inside modals the panel must escape the scrolling body */
+.modal .combo-panel, .drawer .combo-panel { z-index: 500; }
+.req { color: var(--red); }
+.hint-inline {
+  font-weight: 500; font-size: 11px; color: var(--text-muted);
+  text-transform: none; letter-spacing: 0;
+}
+
+/* ---------- Inline create blocks (New Project form) ---------- */
+.inline-create {
+  padding: 14px; margin-bottom: 14px;
+  border: 1px dashed rgba(var(--accent-rgb), 0.45);
+  border-radius: var(--radius); background: rgba(var(--accent-rgb), 0.05);
+}
+.inline-create-head {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+  font-size: 12.5px; font-weight: 700; color: var(--accent);
+}
+.add-person-row {
+  display: grid; grid-template-columns: 1.6fr 1.2fr 66px auto; gap: 8px; align-items: center;
+  margin-bottom: 10px;
+}
+.add-person-row .input { margin: 0; }
+.chip-list { display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 6px; }
+.new-chip {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 8px 5px 11px; border-radius: 100px;
+  background: rgba(var(--green-rgb), 0.14);
+  border: 1px solid rgba(var(--green-rgb), 0.35);
+  font-size: 12px; font-weight: 600; color: var(--text-primary);
+}
+.new-chip small { color: var(--text-muted); font-weight: 500; }
+.new-chip button {
+  width: 18px; height: 18px; border-radius: 50%; background: rgba(0,0,0,0.25);
+  color: var(--text-secondary); font-size: 13px; line-height: 1;
+  display: flex; align-items: center; justify-content: center;
+}
+.new-chip button:hover { background: var(--red); color: #fff; }
+.new-tag {
+  display: inline-block; padding: 1px 7px; border-radius: 100px;
+  background: var(--green); color: #04140a;
+  font-size: 10px; font-weight: 700; text-transform: uppercase;
+}
+.summary-box {
+  margin-top: 16px; padding: 13px 15px;
+  border-radius: var(--radius); background: var(--bg-input);
+  border-left: 3px solid var(--accent);
+}
+.summary-title {
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .3px; color: var(--accent); margin-bottom: 8px;
+}
+.summary-box ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 5px; }
+.summary-box li { font-size: 12.5px; color: var(--text-secondary); }
+
+@media (max-width: 600px) {
+  .add-person-row { grid-template-columns: 1fr 1fr; }
+  .add-person-row button { grid-column: 1 / -1; }
+}

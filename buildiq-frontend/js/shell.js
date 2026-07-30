@@ -66,7 +66,9 @@ const Shell = (() => {
           </div>`;
       }).join("");
 
-    const orgSubLabel = user.role === "Department Manager" || user.role === "Engineer"
+    const orgSubLabel = user.role === Roles.PROJECT_MANAGER
+      ? "Project Delivery"
+      : user.role === "Department Manager" || user.role === "Engineer"
       ? `${user.department} Dept.`
       : user.role === "Client" ? "Client Account" : "Construction Management";
 
@@ -90,11 +92,33 @@ const Shell = (() => {
           ${Components.createAvatar(user.name, "md")}
           <div class="user-meta">
             <div class="user-name">${Utils.escapeHtml(user.name)}</div>
-            <div class="user-role">${Utils.escapeHtml(user.role)}</div>
+            ${Auth.hasMultipleRoles() ? `
+              <button class="user-role role-switch-btn" id="roleSwitchBtn" aria-haspopup="true" aria-expanded="false"
+                      title="Switch role">
+                <span>${Utils.escapeHtml(user.role)}</span>
+                <i class="fa-solid fa-repeat"></i>
+              </button>`
+            : `<div class="user-role">${Utils.escapeHtml(user.role)}</div>`}
           </div>
           <div class="sidebar-footer-actions">
             <button class="icon-btn" id="logoutBtn" aria-label="Log out" title="Log out"><i class="fa-solid fa-arrow-right-from-bracket"></i></button>
           </div>
+          ${Auth.hasMultipleRoles() ? `
+            <div class="role-switch-menu hidden" id="roleSwitchMenu" role="menu" aria-label="Switch role">
+              <div class="role-switch-head">Switch role</div>
+              ${Auth.getRoles().map(r => {
+                const active = r === user.role;
+                return `
+                <button class="role-switch-opt ${active ? "active" : ""}" role="menuitem" data-role="${Utils.escapeHtml(r)}">
+                  <span class="rs-dot" style="background:${Utils.roleColorHex(r)};"></span>
+                  <span class="rs-label">
+                    <b>${Utils.escapeHtml(r)}</b>
+                    <small>${Utils.escapeHtml((Roles.ROLE_DESCRIPTIONS[r] || "").split(".")[0])}</small>
+                  </span>
+                  ${active ? `<i class="fa-solid fa-check"></i>` : ""}
+                </button>`;
+              }).join("")}
+            </div>` : ""}
         </div>
       </aside>
       <div class="sidebar-backdrop" id="sidebarBackdrop"></div>`;
@@ -116,7 +140,10 @@ const Shell = (() => {
         </div>
         <div class="topbar-right">
           <div class="ai-status"><span class="pulse-dot"></span> AI Online</div>
-          <button class="icon-btn" id="notifBtn" aria-label="Notifications"><i class="fa-solid fa-bell"></i><span class="dot-badge"></span></button>
+          <div class="notif-wrap">
+            <button class="icon-btn" id="notifBtn" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-bell"></i><span class="dot-badge hidden" id="notifDot"></span></button>
+            <div class="notif-dropdown hidden" id="notifDropdown" role="menu" aria-label="Notifications"></div>
+          </div>
           <button class="icon-btn" id="themeToggleBtn" aria-label="Toggle theme"><i class="fa-solid fa-moon"></i></button>
           <div class="user-chip" id="userMenuBtn">
             ${Components.createAvatar(user.name, "sm")}
@@ -195,11 +222,11 @@ const Shell = (() => {
       window.location.href = "settings.html";
     });
 
+    // Role switcher (only rendered when the person holds more than one role)
+    initRoleSwitcher();
+
     // Notifications
-    const notifBtn = document.getElementById("notifBtn");
-    if (notifBtn) notifBtn.addEventListener("click", () => {
-      Components.createToast("You have 3 new notifications.", "info");
-    });
+    initNotifications();
 
     // Spotlight
     const spotlightTrigger = document.getElementById("spotlightTrigger");
@@ -211,6 +238,130 @@ const Shell = (() => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
         openSpotlight();
+      }
+    });
+  }
+
+  // ---------------- Role switcher ----------------
+  function initRoleSwitcher() {
+    const btn = document.getElementById("roleSwitchBtn");
+    const menu = document.getElementById("roleSwitchMenu");
+    if (!btn || !menu) return;
+
+    const close = () => { menu.classList.add("hidden"); btn.setAttribute("aria-expanded", "false"); };
+
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const open = menu.classList.contains("hidden");
+      menu.classList.toggle("hidden", !open);
+      btn.setAttribute("aria-expanded", String(open));
+    });
+    document.addEventListener("click", (e) => {
+      if (!menu.contains(e.target) && !btn.contains(e.target)) close();
+    });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape") close(); });
+
+    Utils.qsa(".role-switch-opt", menu).forEach(opt => opt.addEventListener("click", () => {
+      const role = opt.dataset.role;
+      if (role === Auth.getActiveRole()) { close(); return; }
+      if (!Auth.switchRole(role)) { Components.createToast("You don't hold that role.", "error"); return; }
+
+      // Stay on the current page if the new role can still see it; otherwise
+      // fall back to the dashboard rather than bouncing off a denied page.
+      const page = Router.currentPageKey();
+      const stillAllowed = Router.accessFor(page, role) !== false;
+      const target = stillAllowed ? `${page}.html` : "dashboard.html";
+
+      Components.createToast(`Switched to ${role}.`, "success");
+      setTimeout(() => { window.location.href = target; }, 350);
+    }));
+  }
+
+  // ---------------- Notifications dropdown ----------------
+  let notifCache = [];
+
+  function notifTypeColor(type) {
+    return type === "error" ? "var(--red)" : type === "warning" ? "var(--yellow)" : type === "success" ? "var(--green)" : "var(--blue)";
+  }
+
+  function renderNotifList() {
+    const dropdown = document.getElementById("notifDropdown");
+    if (!dropdown) return;
+    const unread = notifCache.filter(n => !n.read).length;
+
+    dropdown.innerHTML = `
+      <div class="notif-header">
+        <span>Notifications${unread ? ` <span class="notif-count">${unread}</span>` : ""}</span>
+        ${unread ? `<button class="notif-mark-all" id="notifMarkAll">Mark all read</button>` : ""}
+      </div>
+      <div class="notif-list">
+        ${notifCache.length ? notifCache.map(n => `
+          <a class="notif-item ${n.read ? "" : "unread"}" data-id="${n.id}" ${n.link ? `href="${n.link}"` : `href="#"`}>
+            <span class="notif-icon" style="color:${notifTypeColor(n.type)};"><i class="fa-solid ${n.icon}"></i></span>
+            <span class="notif-body">
+              <span class="notif-title">${Utils.escapeHtml(n.title)}</span>
+              <span class="notif-text">${Utils.escapeHtml(n.body)}</span>
+              <span class="notif-time">${Utils.timeAgo(n.created_at)}</span>
+            </span>
+            ${n.read ? "" : `<span class="notif-unread-dot"></span>`}
+          </a>`).join("")
+        : `<div class="notif-empty"><i class="fa-solid fa-bell-slash"></i><span>You're all caught up</span></div>`}
+      </div>`;
+
+    const dot = document.getElementById("notifDot");
+    if (dot) dot.classList.toggle("hidden", unread === 0);
+
+    document.getElementById("notifMarkAll")?.addEventListener("click", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      await API.markAllNotificationsRead();
+      notifCache = notifCache.map(n => ({ ...n, read: true }));
+      renderNotifList();
+    });
+
+    Utils.qsa(".notif-item", dropdown).forEach(item => item.addEventListener("click", async (e) => {
+      const id = item.dataset.id;
+      const n = notifCache.find(x => x.id === id);
+      if (n && !n.read) {
+        await API.markNotificationRead(id);
+        n.read = true;
+      }
+      if (!n?.link) { e.preventDefault(); renderNotifList(); }
+    }));
+  }
+
+  async function refreshNotifications() {
+    try {
+      notifCache = await API.getNotifications();
+    } catch { notifCache = []; }
+    renderNotifList();
+  }
+
+  function initNotifications() {
+    const notifBtn = document.getElementById("notifBtn");
+    const dropdown = document.getElementById("notifDropdown");
+    if (!notifBtn || !dropdown) return;
+
+    refreshNotifications();
+
+    notifBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const willOpen = dropdown.classList.contains("hidden");
+      dropdown.classList.toggle("hidden", !willOpen);
+      notifBtn.setAttribute("aria-expanded", String(willOpen));
+      if (willOpen) refreshNotifications();
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!dropdown.contains(e.target) && e.target !== notifBtn) {
+        dropdown.classList.add("hidden");
+        notifBtn.setAttribute("aria-expanded", "false");
+      }
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape") {
+        dropdown.classList.add("hidden");
+        notifBtn.setAttribute("aria-expanded", "false");
       }
     });
   }
@@ -284,5 +435,5 @@ const Shell = (() => {
     Router.showAccessDeniedIfNeeded();
   }
 
-  return { render, NAV_GROUPS };
+  return { render, NAV_GROUPS, refreshNotifications };
 })();

@@ -12,12 +12,13 @@ const DashboardPage = (() => {
     const s = MockData.dashboardStats(role);
     if (role === "Super Admin" || role === "General Manager") {
       return [
-        Components.createStatCard("Active Projects", s.active_projects, 8, "accent", "fa-diagram-project"),
-        Components.createStatCard("Total Members", s.total_members, 4, "blue", "fa-users"),
-        Components.createStatCard("High Risk Projects", s.high_risk, -12, "red", "fa-triangle-exclamation"),
-        Components.createStatCard("Open Complaints", s.open_complaints, 3, "yellow", "fa-comments"),
-        role === "Super Admin" ? Components.createStatCard("Audit Flags", s.audit_flags, -5, "purple", "fa-shield-halved")
-                               : Components.createStatCard("Departments", MockData.departments.length, null, "cyan", "fa-building"),
+        Components.createStatCard("Active Projects", s.active_projects, 8, "accent", "fa-diagram-project", { href: "projects.html?status=In+Progress", hint: "View projects" }),
+        Components.createStatCard("Total Members", s.total_members, 4, "blue", "fa-users", { href: "members.html", hint: "View members" }),
+        Components.createStatCard("High Risk Projects", s.high_risk, -12, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
+        Components.createStatCard("Open Complaints", s.open_complaints, 3, "yellow", "fa-comments", { href: "complaints.html?status=pending", hint: "Triage now" }),
+        role === "Super Admin"
+          ? Components.createStatCard("Audit Flags", s.audit_flags, -5, "purple", "fa-shield-halved", { href: "audit.html", hint: "Investigate" })
+          : Components.createStatCard("Departments", MockData.departments.length, null, "cyan", "fa-building", { href: "departments.html", hint: "View departments" }),
       ];
     }
     if (role === "Department Manager") {
@@ -25,36 +26,53 @@ const DashboardPage = (() => {
       const deptComplaints = MockData.complaints.filter(c => c.department === user.department);
       const deptMembers = MockData.members.filter(m => m.department === user.department);
       return [
-        Components.createStatCard("Dept. Projects", deptProjects.length, null, "accent", "fa-diagram-project"),
-        Components.createStatCard("Team Members", deptMembers.length, null, "blue", "fa-users"),
-        Components.createStatCard("Open Complaints", deptComplaints.filter(c=>c.status!=="resolved").length, null, "yellow", "fa-comments"),
-        Components.createStatCard("High Risk", deptProjects.filter(p=>p.delay_risk==="HIGH").length, null, "red", "fa-triangle-exclamation"),
+        Components.createStatCard("Dept. Projects", deptProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
+        Components.createStatCard("Team Members", deptMembers.length, null, "blue", "fa-users", { href: "members.html", hint: "View team" }),
+        Components.createStatCard("Open Complaints", deptComplaints.filter(c=>c.status!=="resolved").length, null, "yellow", "fa-comments", { href: "complaints.html?status=pending", hint: "Resolve" }),
+        Components.createStatCard("High Risk", deptProjects.filter(p=>p.delay_risk==="HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
+      ];
+    }
+    if (role === "Project Manager") {
+      const mine = Roles.managedProjects(user, MockData.projects);
+      const team = Roles.managedTeam(user, MockData.projects);
+      const ids = new Set(mine.map(p => p.id));
+      const openTasks = MockData.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done");
+      const overdue = openTasks.filter(t => new Date(t.due_date) < new Date()).length;
+      const avgProgress = mine.length ? Math.round(mine.reduce((s, p) => s + p.progress, 0) / mine.length) : 0;
+      const spend = mine.reduce((s, p) => s + (p.materials_total_cost || 0), 0);
+      return [
+        Components.createStatCard("My Projects", mine.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
+        Components.createStatCard("Avg. Progress", `${avgProgress}%`, null, "blue", "fa-chart-line", { href: "projects.html", hint: "See progress" }),
+        Components.createStatCard("At Risk", mine.filter(p => p.delay_risk === "HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
+        Components.createStatCard("Team Size", team.length, null, "cyan", "fa-users", { href: "members.html", hint: "View team" }),
+        Components.createStatCard("Overdue Tasks", overdue, null, "yellow", "fa-clock", { href: "tasks.html", hint: "Open tasks" }),
+        Components.createStatCard("Materials Spend", Utils.currency(spend), null, "purple", "fa-boxes-stacked", { href: "projects.html", hint: "View costs" }),
       ];
     }
     if (role === "Engineer") {
       const myTasks = MockData.tasks.filter(t => t.assignee_id === user.id);
       const overdue = myTasks.filter(t => t.status !== "Done" && new Date(t.due_date) < new Date()).length;
       return [
-        Components.createStatCard("Open Tasks", myTasks.filter(t=>t.status!=="Done").length, null, "accent", "fa-list-check"),
-        Components.createStatCard("My Projects", Roles.visibleProjects(user, MockData.projects).length, null, "blue", "fa-diagram-project"),
-        Components.createStatCard("Overdue", overdue, null, "red", "fa-clock"),
+        Components.createStatCard("Open Tasks", myTasks.filter(t=>t.status!=="Done").length, null, "accent", "fa-list-check", { href: "tasks.html", hint: "Open tasks" }),
+        Components.createStatCard("My Projects", Roles.visibleProjects(user, MockData.projects).length, null, "blue", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
+        Components.createStatCard("Overdue", overdue, null, "red", "fa-clock", { href: "tasks.html", hint: "Catch up" }),
       ];
     }
     if (role === "Client") {
       const myProjects = Roles.visibleProjects(user, MockData.projects);
       const myComplaints = Roles.visibleComplaints(user, MockData.complaints);
       return [
-        Components.createStatCard("My Projects", myProjects.length, null, "accent", "fa-diagram-project"),
-        Components.createStatCard("Avg. Progress", myProjects.length ? Math.round(myProjects.reduce((s,p)=>s+p.progress,0)/myProjects.length) + "%" : "—", null, "blue", "fa-chart-line"),
-        Components.createStatCard("My Complaints", myComplaints.length, null, "yellow", "fa-comments"),
+        Components.createStatCard("My Projects", myProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
+        Components.createStatCard("Avg. Progress", myProjects.length ? Math.round(myProjects.reduce((s,p)=>s+p.progress,0)/myProjects.length) + "%" : "—", null, "blue", "fa-chart-line", { href: "projects.html", hint: "See progress" }),
+        Components.createStatCard("My Complaints", myComplaints.length, null, "yellow", "fa-comments", { href: "complaints.html", hint: "Track complaints" }),
       ];
     }
     // Auditor
     return [
-      Components.createStatCard("Flagged Today", s.audit_flags, 12, "red", "fa-triangle-exclamation"),
-      Components.createStatCard("Under Review", Math.round(s.audit_flags*1.6), null, "yellow", "fa-magnifying-glass"),
-      Components.createStatCard("Cleared", 128, null, "green", "fa-circle-check"),
-      Components.createStatCard("AI Accuracy", "94%", null, "purple", "fa-brain"),
+      Components.createStatCard("Flagged Today", s.audit_flags, 12, "red", "fa-triangle-exclamation", { href: "audit.html", hint: "Investigate" }),
+      Components.createStatCard("Under Review", Math.round(s.audit_flags*1.6), null, "yellow", "fa-magnifying-glass", { href: "audit.html", hint: "Review queue" }),
+      Components.createStatCard("Cleared", 128, null, "green", "fa-circle-check", { href: "audit.html", hint: "View log" }),
+      Components.createStatCard("AI Accuracy", "94%", null, "purple", "fa-brain", { href: "audit.html", hint: "Model stats" }),
     ];
   }
 
@@ -113,6 +131,133 @@ const DashboardPage = (() => {
         <div class="section-title"><i class="fa-solid fa-comments"></i> Open Complaints — My Department</div>
         <div id="deptComplaintsList" class="flex-col gap-12"></div>
       </div>`;
+  }
+
+  function renderProjectManager() {
+    return `
+      <div class="stats-row" id="statsRow" style="grid-template-columns:repeat(3,1fr);"></div>
+      ${aiExecSummaryBox("execSummary")}
+      <div class="card" style="margin-bottom:20px;">
+        <div class="flex items-center justify-between" style="margin-bottom:14px;">
+          <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-diagram-project"></i> Projects I Manage</div>
+          <a href="projects.html" class="btn btn-outline btn-sm">Open Projects</a>
+        </div>
+        <div id="pmProjectsList" class="flex-col gap-12"></div>
+      </div>
+      <div class="charts-row">
+        <div class="card chart-card">
+          <div class="section-title"><i class="fa-solid fa-chart-column"></i> Progress vs Expected</div>
+          <canvas id="pmProgressChart"></canvas>
+        </div>
+        <div class="card chart-card">
+          <div class="section-title"><i class="fa-solid fa-users"></i> Team Workload</div>
+          <canvas id="pmWorkloadChart"></canvas>
+        </div>
+      </div>
+      <div class="grid" style="grid-template-columns:1fr 1fr; gap:16px;">
+        <div class="card">
+          <div class="flex items-center justify-between" style="margin-bottom:14px;">
+            <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-ranking-star"></i> Urgent Team Tasks</div>
+            <a href="tasks.html" class="btn btn-outline btn-sm">Assign</a>
+          </div>
+          <div id="pmTasksList" class="flex-col gap-8"></div>
+        </div>
+        <div class="card">
+          <div class="section-title"><i class="fa-solid fa-comments"></i> Complaints on My Projects</div>
+          <div id="pmComplaintsList" class="flex-col gap-12"></div>
+        </div>
+      </div>`;
+  }
+
+  async function fillProjectManager(user) {
+    const mine = Roles.managedProjects(user, MockData.projects);
+    const team = Roles.managedTeam(user, MockData.projects);
+    const ids = new Set(mine.map(p => p.id));
+
+    // AI summary scoped to this PM's portfolio
+    const atRisk = mine.filter(p => p.delay_risk === "HIGH");
+    const behind = mine.filter(p => p.progress < p.expected_progress);
+    const openComplaints = Roles.visibleComplaints(user, MockData.complaints, MockData.projects)
+      .filter(c => c.status !== "resolved");
+    document.getElementById("execSummary").querySelector("div:nth-child(2)").innerHTML =
+      `You manage ${mine.length} project${mine.length === 1 ? "" : "s"} with ${team.length} people. ` +
+      (atRisk.length
+        ? `${atRisk.length} ${atRisk.length === 1 ? "is" : "are"} flagged HIGH risk (${atRisk.slice(0, 2).map(p => Utils.escapeHtml(p.title)).join(", ")}). `
+        : `None are flagged HIGH risk. `) +
+      (behind.length ? `${behind.length} trailing the planned schedule. ` : "") +
+      `${openComplaints.length} open complaint${openComplaints.length === 1 ? "" : "s"} on your projects. ` +
+      (atRisk.length || behind.length
+        ? "Recommend re-sequencing critical-path tasks and confirming material deliveries this week."
+        : "Delivery is tracking to plan — keep the current cadence.");
+
+    // Project list
+    document.getElementById("pmProjectsList").innerHTML = mine.length ? mine.map(p => `
+      <div class="card clickable-entity" data-entity="project" data-id="${p.id}" style="padding:14px; cursor:pointer;">
+        <div class="flex items-center justify-between" style="margin-bottom:8px;">
+          <b style="font-size:13.5px;">${Utils.escapeHtml(p.title)}</b>
+          ${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}
+        </div>
+        <div style="font-size:12px; color:var(--text-muted); margin-bottom:8px;">${Utils.escapeHtml(p.department || "—")} · ${(p.team || []).length} on team · ${Utils.currency(p.budget)}</div>
+        ${Components.createProgressBar(p.progress, Utils.riskBadgeType(p.delay_risk) === "red" ? "red" : "")}
+        <div class="flex items-center justify-between" style="margin-top:8px; font-size:12px; color:var(--text-muted);">
+          <span>${p.progress}% complete (expected ${p.expected_progress}%)</span>
+          <span>Due ${Utils.formatDate(p.deadline)}</span>
+        </div>
+      </div>`).join("") : Components.createEmptyState("fa-diagram-project", "You don't manage any projects yet");
+    EntityDetail.bindAuto(document.getElementById("pmProjectsList"));
+
+    // Progress vs expected
+    if (mine.length) {
+      charts.push(new Chart(document.getElementById("pmProgressChart"), {
+        type: "bar",
+        data: {
+          labels: mine.map(p => p.title.length > 16 ? p.title.slice(0, 15) + "…" : p.title),
+          datasets: [
+            { label: "Actual", data: mine.map(p => p.progress), backgroundColor: "#F97316", borderRadius: 6 },
+            { label: "Expected", data: mine.map(p => p.expected_progress), backgroundColor: "rgba(100,116,139,0.45)", borderRadius: 6 },
+          ],
+        },
+        options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } },
+          plugins: { legend: { position: "bottom", labels: { boxWidth: 10, font: { size: 11 } } } } },
+      }));
+
+      const workload = team.slice(0, 6).map(m => ({
+        name: m.full_name.split(" ")[0],
+        count: MockData.tasks.filter(t => t.assignee_id === m.id && t.status !== "Done").length,
+      })).sort((a, b) => b.count - a.count);
+      charts.push(new Chart(document.getElementById("pmWorkloadChart"), {
+        type: "bar",
+        data: { labels: workload.map(w => w.name), datasets: [{ data: workload.map(w => w.count), backgroundColor: "#3B82F6", borderRadius: 6 }] },
+        options: { indexAxis: "y", responsive: true, maintainAspectRatio: false,
+          plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true } } },
+      }));
+    }
+
+    // Urgent tasks across the portfolio
+    const urgent = AIEngine.prioritizeTasks(
+      MockData.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done")).slice(0, 5);
+    document.getElementById("pmTasksList").innerHTML = urgent.length ? urgent.map(t => `
+      <a class="dash-row" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
+        ${Components.createBadge(t.ai_priority, Utils.priorityBadgeType(t.ai_priority))}
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600;">${Utils.escapeHtml(t.title)}</div>
+          <div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(t.assignee_name || "Unassigned")} · due ${Utils.formatDate(t.due_date)}</div>
+        </div>
+        <i class="fa-solid fa-chevron-right dash-row-go"></i>
+      </div>`).join("") : Components.createEmptyState("fa-check", "No open tasks on your projects");
+
+    // Complaints raised against these projects
+    document.getElementById("pmComplaintsList").innerHTML = openComplaints.length
+      ? openComplaints.slice(0, 5).map(c => `
+        <a class="dash-row" href="complaints.html" aria-label="Open complaint ${Utils.escapeHtml(c.id)}">
+          <div style="min-width:0; flex:1;">
+            <b>${Utils.escapeHtml(c.id)}</b> — ${Utils.escapeHtml(c.category)}
+            <div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(c.project || "")}</div>
+          </div>
+          ${Components.createBadge(c.severity, Utils.severityColor(c.severity))}
+          <i class="fa-solid fa-chevron-right dash-row-go"></i>
+        </a>`).join("")
+      : Components.createEmptyState("fa-face-smile", "No open complaints on your projects");
   }
 
   function renderEngineer() {
@@ -182,6 +327,7 @@ const DashboardPage = (() => {
 
     if (Roles.ORG_WIDE.includes(user.role)) body.innerHTML = renderOrgWide(user.role);
     else if (user.role === "Department Manager") body.innerHTML = renderDeptManager();
+    else if (user.role === Roles.PROJECT_MANAGER) body.innerHTML = renderProjectManager();
     else if (user.role === "Engineer") body.innerHTML = renderEngineer();
     else if (user.role === "Client") body.innerHTML = renderClient();
     else body.innerHTML = renderAuditor();
@@ -190,6 +336,7 @@ const DashboardPage = (() => {
 
     if (Roles.ORG_WIDE.includes(user.role)) await fillOrgWide(user);
     else if (user.role === "Department Manager") await fillDeptManager(user);
+    else if (user.role === Roles.PROJECT_MANAGER) await fillProjectManager(user);
     else if (user.role === "Engineer") await fillEngineer(user);
     else if (user.role === "Client") await fillClient(user);
     else await fillAuditor();
@@ -278,10 +425,11 @@ const DashboardPage = (() => {
   async function fillEngineer(user) {
     const myTasks = AIEngine.prioritizeTasks(MockData.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done")).slice(0,5);
     document.getElementById("topTasksList").innerHTML = myTasks.length ? myTasks.map(t => `
-      <div class="flex items-center justify-between" style="padding:10px 12px; background:var(--bg-input); border-radius:8px;">
-        <div><div style="font-weight:600; font-size:13px;">${Utils.escapeHtml(t.title)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(t.project_title)} · Due ${Utils.formatDate(t.due_date)}</div></div>
+      <a class="dash-row boxed" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
+        <div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:13px;">${Utils.escapeHtml(t.title)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(t.project_title)} · Due ${Utils.formatDate(t.due_date)}</div></div>
         ${Components.createBadge(t.ai_priority, Utils.priorityBadgeType(t.ai_priority))}
-      </div>`).join("") : Components.createEmptyState("fa-champagne-glasses", "No open tasks — you're all caught up!");
+        <i class="fa-solid fa-chevron-right dash-row-go"></i>
+      </a>`).join("") : Components.createEmptyState("fa-champagne-glasses", "No open tasks — you're all caught up!");
 
     document.getElementById("activityFeed").innerHTML = `
       <div class="activity-item"><div class="activity-icon"><i class="fa-solid fa-check"></i></div><div><div class="activity-text">Marked "Site safety inspection" complete</div><div class="activity-time">2h ago</div></div></div>

@@ -61,28 +61,44 @@ const Components = (() => {
   }
 
   // ---------------- Stat card ----------------
-  function createStatCard(label, value, trend, color = "orange", icon = "fa-chart-line") {
+  // `link` makes the whole card a target: either a plain href string, or
+  // { href, hint } to also show a call-to-action line. Long values (currency,
+  // percentages) get a smaller size class so nothing is ever clipped.
+  function createStatCard(label, value, trend, color = "orange", icon = "fa-chart-line", link = null) {
     const id = Utils.uid("stat");
     const isNumeric = typeof value === "number";
     setTimeout(() => {
       const el = document.getElementById(id);
       if (el && isNumeric) countUp(el, value);
     }, 30);
+
     const trendHtml = trend !== undefined && trend !== null ? `
-      <span class="stat-trend ${trend >= 0 ? "up" : "down"}">
-        <i class="fa-solid ${trend >= 0 ? "fa-arrow-up" : "fa-arrow-down"}"></i> ${Math.abs(trend)}%
+      <span class="stat-trend ${trend >= 0 ? "up" : "down"}" title="${trend >= 0 ? "Up" : "Down"} ${Math.abs(trend)}% on last period">
+        <i class="fa-solid ${trend >= 0 ? "fa-arrow-trend-up" : "fa-arrow-trend-down"}"></i> ${Math.abs(trend)}%
       </span>` : "";
+
+    // Scale the number down as it gets longer so it always fits on one line.
+    const text = String(value);
+    const sizeClass = text.length > 11 ? "xs" : text.length > 8 ? "sm" : text.length > 5 ? "md" : "";
+
+    const href = typeof link === "string" ? link : (link && link.href) || null;
+    const hint = (link && link.hint) || null;
+    const tag = href ? "a" : "div";
+    const attrs = href
+      ? `href="${escapeHtml(href)}" class="stat-card is-clickable" aria-label="${escapeHtml(label)}: ${escapeHtml(text)}. View details"`
+      : `class="stat-card"`;
+
     return `
-      <div class="stat-card">
-        <div class="stat-icon" style="background:rgba(var(--${color}-rgb, var(--accent-rgb)),0.14); color:var(--${color}, var(--accent));">
-          <i class="fa-solid ${icon}"></i>
-        </div>
-        <div class="stat-value" id="${id}">${isNumeric ? 0 : escapeHtml(String(value))}</div>
-        <div class="flex items-center justify-between">
-          <span class="stat-label">${escapeHtml(label)}</span>
+      <${tag} ${attrs} style="--stat-color: var(--${color}, var(--accent)); --stat-rgb: var(--${color}-rgb, var(--accent-rgb));">
+        <span class="stat-accent" aria-hidden="true"></span>
+        <div class="stat-top">
+          <div class="stat-icon"><i class="fa-solid ${icon}"></i></div>
           ${trendHtml}
         </div>
-      </div>`;
+        <div class="stat-value ${sizeClass}" id="${id}" title="${escapeHtml(text)}">${isNumeric ? 0 : escapeHtml(text)}</div>
+        <div class="stat-label" title="${escapeHtml(label)}">${escapeHtml(label)}</div>
+        ${href ? `<span class="stat-go">${escapeHtml(hint || "View details")} <i class="fa-solid fa-arrow-right"></i></span>` : ""}
+      </${tag}>`;
   }
 
   // ---------------- Member card ----------------
@@ -145,6 +161,14 @@ const Components = (() => {
           <div><div style="font-size:11px;color:var(--text-muted);">Tasks</div><div style="font-weight:600; font-size:13px;">${project.tasks_done}/${project.tasks_total}</div></div>
         </div>
         ${project.delay_reasons.length ? `<div class="flex gap-8" style="flex-wrap:wrap; margin-bottom:12px;">${project.delay_reasons.map(r => createBadge(r,"yellow")).join("")}</div>` : ""}
+        <div class="project-manager-row">
+          ${project.manager_name ? `
+            <span class="pm-label"><i class="fa-solid fa-user-tie"></i> Manager</span>
+            <span class="pm-name clickable-entity" data-entity="member" data-id="${project.manager_id || ""}" style="cursor:pointer;">
+              ${createAvatar(project.manager_name, "sm")}<b>${escapeHtml(project.manager_name)}</b>
+            </span>`
+          : `<span class="pm-label pm-unassigned"><i class="fa-solid fa-user-slash"></i> No manager assigned</span>`}
+        </div>
         <div class="flex items-center justify-between" style="margin-bottom:12px;">
           <div class="avatar-group">${project.team.slice(0,4).map(m => createAvatar(m.full_name, "sm", m.avatar_color)).join("")}</div>
           <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(project.status)}</span>
@@ -200,6 +224,9 @@ const Components = (() => {
   function createAuditCard(log) {
     const riskType = riskBadgeType(log.risk_level);
     const gaugeDeg = Math.round(log.anomaly_score * 360);
+    // Which of the 7 audit types this event belongs to (may be absent on legacy rows)
+    const auditTypeMeta = (window.MockData && log.audit_type)
+      ? MockData.auditTypeMeta(log.audit_type) : null;
     return `
       <div class="card audit-card" data-id="${log.id}">
         <div class="flex items-center gap-16">
@@ -216,13 +243,17 @@ const Components = (() => {
               <span style="font-weight:700; font-size:14px;">${escapeHtml(log.user)}</span>
               ${createBadge(log.user_role, roleColor(log.user_role))}
             </div>
-            <div class="flex items-center gap-8" style="margin-top:6px;">
-              ${createBadge(log.action, (log.action === "BULK_DELETE" || log.action === "EXPORT_DATA") ? "red" : "gray")}
+            <div class="flex items-center gap-8" style="margin-top:6px; flex-wrap:wrap;">
+              ${createBadge(log.action_label || log.action, log.is_flagged ? "red" : "gray")}
               <span style="font-size:12.5px; color:var(--text-muted);">${escapeHtml(log.resource)}</span>
             </div>
           </div>
           <span class="badge badge-${riskType}">${escapeHtml(log.risk_level)}</span>
         </div>
+        ${auditTypeMeta ? `<div class="audit-card-type" style="--type-color:var(--${auditTypeMeta.color});">
+          <span class="type-pill" style="--type-color:var(--${auditTypeMeta.color});"><i class="fa-solid ${auditTypeMeta.icon}"></i> ${escapeHtml(auditTypeMeta.label)}</span>
+          <span class="audit-card-ml"><i class="fa-solid fa-brain"></i> ${escapeHtml(auditTypeMeta.ml_role)}</span>
+        </div>` : ""}
         <div style="margin:12px 0; font-size:12.5px; color:var(--text-muted);">
           <i class="fa-solid fa-clock"></i> ${formatDate(log.timestamp)} — ${escapeHtml(log.context)}
         </div>
@@ -234,6 +265,192 @@ const Components = (() => {
           <button class="btn btn-outline btn-sm false-alarm-btn" data-id="${log.id}"><i class="fa-solid fa-check"></i> False Alarm</button>
         </div>
       </div>`;
+  }
+
+  // ---------------- Combobox: dropdown + free typing ----------------
+  // Any `<input list="...">` on the page is upgraded in place into a combobox:
+  // a chevron opens the full option list, typing filters it, and (when the
+  // field allows it) you can still enter a value that isn't on the list.
+  // The <datalist> stays in the DOM as the data source and as a native
+  // fallback if this script never runs.
+  const Combo = (() => {
+    const UPGRADED = "data-combo-ready";
+
+    function optionsFor(input) {
+      const list = document.getElementById(input.getAttribute("list"));
+      if (!list) return [];
+      return Array.from(list.querySelectorAll("option")).map(o => ({
+        value: o.value,
+        sub: (o.textContent || "").trim() && o.textContent.trim() !== o.value ? o.textContent.trim() : "",
+      }));
+    }
+
+    function closeAll(except) {
+      Utils.qsa(".combo.open").forEach(c => {
+        if (c === except) return;
+        c.classList.remove("open");
+        const i = c.querySelector("input");
+        if (i) i.setAttribute("aria-expanded", "false");
+      });
+    }
+
+    function upgrade(input) {
+      if (!input || input.hasAttribute(UPGRADED) || !input.getAttribute("list")) return;
+      input.setAttribute(UPGRADED, "1");
+
+      const wrap = document.createElement("div");
+      wrap.className = "combo";
+      input.parentNode.insertBefore(wrap, input);
+      wrap.appendChild(input);
+
+      const panelId = `${input.id || Utils.uid("combo")}__panel`;
+      wrap.insertAdjacentHTML("beforeend", `
+        <button type="button" class="combo-toggle" tabindex="-1" aria-label="Show options">
+          <i class="fa-solid fa-chevron-down"></i>
+        </button>
+        <div class="combo-panel" id="${panelId}" role="listbox"></div>`);
+
+      const toggle = wrap.querySelector(".combo-toggle");
+      const panel = wrap.querySelector(".combo-panel");
+
+      input.setAttribute("role", "combobox");
+      input.setAttribute("aria-expanded", "false");
+      input.setAttribute("aria-autocomplete", "list");
+      input.setAttribute("aria-controls", panelId);
+      input.setAttribute("autocomplete", "off");
+
+      let active = -1;
+
+      // `filter = false` shows everything (used by the chevron), otherwise the
+      // list narrows to what has been typed so far.
+      function render(filter = true) {
+        const q = filter ? input.value.trim().toLowerCase() : "";
+        const opts = optionsFor(input).filter(o => !q || o.value.toLowerCase().includes(q));
+        active = -1;
+        panel.innerHTML = opts.length
+          ? opts.map((o, i) => `
+              <div class="combo-opt" role="option" data-i="${i}" data-value="${Utils.escapeHtml(o.value)}" aria-selected="false">
+                <span>${Utils.escapeHtml(o.value)}</span>${o.sub ? `<small>${Utils.escapeHtml(o.sub)}</small>` : ""}
+              </div>`).join("")
+          : `<div class="combo-empty">${input.dataset.allowNew === "0" ? "No matches" : "No matches — press Enter to use what you typed"}</div>`;
+
+        Utils.qsa(".combo-opt", panel).forEach(el => {
+          // mousedown fires before blur, so the click isn't lost
+          el.addEventListener("mousedown", (e) => { e.preventDefault(); choose(el.dataset.value); });
+        });
+      }
+
+      function open(filter = true) { render(filter); wrap.classList.add("open"); input.setAttribute("aria-expanded", "true"); closeAll(wrap); }
+      function close() { wrap.classList.remove("open"); input.setAttribute("aria-expanded", "false"); }
+
+      function choose(value) {
+        input.value = value;
+        close();
+        // Let any existing listeners (hints, dependent lists) react.
+        input.dispatchEvent(new Event("input", { bubbles: true }));
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+        input.focus();
+      }
+
+      function setActive(next) {
+        const items = Utils.qsa(".combo-opt", panel);
+        if (!items.length) return;
+        active = (next + items.length) % items.length;
+        items.forEach((el, i) => {
+          el.classList.toggle("active", i === active);
+          el.setAttribute("aria-selected", i === active ? "true" : "false");
+        });
+        // Guarded: not implemented in every environment (older browsers, jsdom).
+        items[active].scrollIntoView?.({ block: "nearest" });
+      }
+
+      // Set while the chevron is opening, so the focus handler that follows
+      // doesn't immediately re-render the list with the filter applied.
+      let browsing = false;
+
+      toggle.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        if (wrap.classList.contains("open")) { close(); return; }
+        browsing = true;
+        open(false);          // chevron always shows the full list
+        input.focus();
+        setTimeout(() => { browsing = false; }, 0);
+      });
+
+      input.addEventListener("input", () => open(true));
+      input.addEventListener("focus", () => {
+        if (browsing) return;                    // the chevron already opened it
+        if (input.value.trim()) open(true);
+      });
+      input.addEventListener("blur", () => setTimeout(close, 120));
+
+      input.addEventListener("keydown", (e) => {
+        const isOpen = wrap.classList.contains("open");
+        if (e.key === "ArrowDown") { e.preventDefault(); if (!isOpen) open(false); else setActive(active + 1); }
+        else if (e.key === "ArrowUp") { e.preventDefault(); if (isOpen) setActive(active - 1); }
+        else if (e.key === "Enter") {
+          const items = Utils.qsa(".combo-opt", panel);
+          if (isOpen && active >= 0 && items[active]) { e.preventDefault(); choose(items[active].dataset.value); }
+          else close();
+        }
+        else if (e.key === "Escape") { if (isOpen) { e.preventDefault(); close(); } }
+        else if (e.key === "Tab") close();
+      });
+    }
+
+    function upgradeAll(root = document) {
+      Utils.qsa("input[list]", root).forEach(upgrade);
+    }
+
+    function init() {
+      upgradeAll();
+      // Modals and drawers are injected later — upgrade them as they appear.
+      new MutationObserver(muts => {
+        muts.forEach(m => m.addedNodes.forEach(n => {
+          if (n.nodeType !== 1) return;
+          if (n.matches?.("input[list]")) upgrade(n);
+          else upgradeAll(n);
+        }));
+      }).observe(document.body, { childList: true, subtree: true });
+
+      document.addEventListener("mousedown", (e) => {
+        if (!e.target.closest(".combo")) closeAll();
+      });
+    }
+
+    return { init, upgrade, upgradeAll };
+  })();
+
+  if (typeof document !== "undefined") {
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", () => Combo.init());
+    else Combo.init();
+  }
+
+  // ---------------- Typed input with suggestions ----------------
+  // A free-text <input> backed by a <datalist>: users can type anything, but
+  // still get autocomplete for the known values. Use `resolveTypedValue` to
+  // map what was typed back to an option id.
+  function createTypedInput({ id, options = [], value = "", placeholder = "Type to search...", allowNew = true, required = false } = {}) {
+    const listId = `${id}__list`;
+    const opts = options.map(o => (typeof o === "string" ? { id: o, label: o } : o));
+    const current = opts.find(o => o.id === value);
+    return `
+      <input class="input typed-input" id="${id}" list="${listId}"
+             value="${escapeHtml(current ? current.label : value || "")}"
+             placeholder="${escapeHtml(placeholder)}" autocomplete="off"
+             ${required ? "required" : ""} data-allow-new="${allowNew ? "1" : "0"}">
+      <datalist id="${listId}">
+        ${opts.map(o => `<option value="${escapeHtml(o.label)}">${o.sub ? escapeHtml(o.sub) : ""}</option>`).join("")}
+      </datalist>`;
+  }
+
+  // Given what the user typed, find the matching option (case-insensitive).
+  // Returns { option, isNew, text }.
+  function resolveTypedValue(inputEl, options = []) {
+    const text = (inputEl?.value || "").trim();
+    const opts = options.map(o => (typeof o === "string" ? { id: o, label: o } : o));
+    const match = opts.find(o => o.label.toLowerCase() === text.toLowerCase());
+    return { option: match || null, isNew: !!text && !match, text };
   }
 
   // ---------------- Skeleton ----------------
@@ -322,6 +539,7 @@ const Components = (() => {
 
   return {
     createToast, createAvatar, createBadge, createProgressBar, createStatCard,
+    createTypedInput, resolveTypedValue, Combo,
     createMemberCard, createProjectCard, createComplaintCard, createAuditCard,
     createSkeleton, skeletonGrid, createEmptyState, createModal, createConfirmDialog, createDrawer,
   };

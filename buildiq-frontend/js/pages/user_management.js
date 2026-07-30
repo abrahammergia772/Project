@@ -64,7 +64,14 @@ const UserManagementPage = (() => {
         }).join("")}</tbody></table></div>`;
     }
     Utils.qsa(".suspend-user-btn").forEach(b => b.addEventListener("click", () => {
-      Components.createConfirmDialog("This user will lose access to BuildIQ immediately.", () => Components.createToast("User suspended.", "success"), { title: "Suspend user?" });
+      Components.createConfirmDialog("This user will lose access to BuildIQ immediately.", () => {
+        const actor = Auth.getUser();
+        const target = MockData.getMemberById(b.dataset.id);
+        if (target) target.status = "Inactive";
+        MockData.logAuditEvent(actor, "SUSPEND_USER", `members/${b.dataset.id}`);
+        Components.createToast("User suspended.", "success");
+        render();
+      }, { title: "Suspend user?" });
     }));
   }
   return { init };

@@ -90,6 +90,17 @@ const EntityDetail = (() => {
       title: p.title,
       bodyHtml: `
         <div class="flex gap-8" style="margin-bottom:14px; flex-wrap:wrap;">${Components.createBadge(p.type,"blue")}${Components.createBadge(p.region,"gray")}${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}</div>
+        <div class="detail-manager-card">
+          <div class="dm-left">
+            <span class="dm-label"><i class="fa-solid fa-user-tie"></i> Project Manager</span>
+            ${p.manager_name ? `
+              <span class="dm-person clickable-entity" data-entity="member" data-id="${p.manager_id||''}" style="cursor:pointer;">
+                ${Components.createAvatar(p.manager_name, "sm")}
+                <span><b>${Utils.escapeHtml(p.manager_name)}</b><small>${Utils.escapeHtml(p.manager_role||"")} · ${Utils.escapeHtml(p.department||"—")}</small></span>
+              </span>`
+            : `<span class="dm-unassigned">Not yet assigned</span>`}
+          </div>
+        </div>
         <p style="font-size:13.5px; color:var(--text-secondary); margin-bottom:18px;">${Utils.escapeHtml(p.description||"")}</p>
         <div class="grid" style="grid-template-columns:repeat(2,1fr); margin-bottom:18px;">
           <div><div style="font-size:11.5px;color:var(--text-muted);">Budget</div><div style="font-weight:700;">${Utils.currency(p.budget)}</div></div>
@@ -139,6 +150,7 @@ const EntityDetail = (() => {
         const mat = (p.materials||[]).find(m => m.id === btn.dataset.id);
         Components.createConfirmDialog(`Remove "${mat?.name || "this material"}" from ${p.title}? This cannot be undone.`, async () => {
           await API.deleteMaterial(p.id, btn.dataset.id);
+          MockData.logAuditEvent(Auth.getUser(), "UPDATE_RECORD", `projects/${p.id}/materials/${btn.dataset.id}`);
           Components.createToast("Material removed.", "success");
           renderMaterialsTab(el);
           refreshCostDisplays();
@@ -244,6 +256,10 @@ const EntityDetail = (() => {
       try {
         if (isEdit) await API.updateMaterial(project.id, existing.id, payload);
         else await API.addMaterial(project.id, payload);
+        MockData.logAuditEvent(
+          Auth.getUser(), "UPDATE_RECORD",
+          `projects/${project.id}/materials${isEdit ? "/" + existing.id : ""}`
+        );
         Components.createToast(isEdit ? "Material updated." : "Material added.", "success");
         overlay.remove();
         onSaved && onSaved();

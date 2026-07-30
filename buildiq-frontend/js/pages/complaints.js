@@ -48,7 +48,14 @@ const ComplaintsPage = (() => {
     allComplaints = await API.getComplaints();
     visible = Roles.visibleComplaints(user, allComplaints);
     renderStats();
-    render(visible);
+
+    // Honour deep-links from the dashboard (e.g. complaints.html?status=pending)
+    const cParams = new URLSearchParams(location.search);
+    const cStatus = cParams.get("status"), cSev = cParams.get("severity");
+    if (cStatus) { const el = document.getElementById("statusFilter"); if (el) el.value = cStatus; }
+    if (cSev) { const el = document.getElementById("sevFilter"); if (el) el.value = cSev; }
+
+    if (cStatus || cSev) applyFilters(); else render(visible);
     renderTrendPanel();
 
     document.getElementById("submitComplaintBtn").addEventListener("click", openSubmitModal);
@@ -169,9 +176,18 @@ const ComplaintsPage = (() => {
       await API.resolveComplaint(c.id, note);
       c.status = "resolved";
       c.resolution_note = note;
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `complaints/${c.id}`);
+      // Tell the original submitter their complaint was resolved.
+      MockData.addNotification({
+        title: "Your complaint was resolved",
+        body: `${c.id} — ${c.category} has been marked resolved.`,
+        icon: "fa-circle-check", type: "success", link: "complaints.html",
+        target: { user_ids: [c.submitted_by] },
+      });
       Components.createToast(`${c.id} marked as resolved.`, "success");
       overlay.remove();
       renderStats(); applyFilters();
+      if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
     });
   }
 
@@ -179,8 +195,8 @@ const ComplaintsPage = (() => {
     Components.createModal({
       title: "Submit a Complaint",
       bodyHtml: `
-        <div class="field"><label>Related Project</label><select class="input" id="cProject">${Roles.visibleProjects(user, MockData.projects).map(p=>`<option value="${p.id}">${p.title}</option>`).join("") || MockData.projects.map(p=>`<option value="${p.id}">${p.title}</option>`).join("")}</select></div>
-        <div class="field"><label>Initial Severity</label><select class="input" id="cSeverity"><option>low</option><option>medium</option><option>high</option><option>critical</option></select></div>
+        <div class="field"><label for="cProject">Related Project</label>${Components.createTypedInput({ id: "cProject", placeholder: "Type a project name...", allowNew: false, options: (Roles.visibleProjects(user, MockData.projects).length ? Roles.visibleProjects(user, MockData.projects) : MockData.projects).map(p => ({ id: p.id, label: p.title })) })}</div>
+        <div class="field"><label for="cSeverity">Initial Severity</label>${Components.createTypedInput({ id: "cSeverity", value: "medium", placeholder: "Type a severity...", allowNew: false, options: ["low","medium","high","critical"] })}</div>
         <div class="field"><label>Complaint Details</label><textarea class="input" id="cText" rows="4" placeholder="Describe the issue in detail..."></textarea></div>
         <div class="field"><label>Attachment (optional)</label><input class="input" type="file" id="cFile"></div>
         <p style="font-size:12px; color:var(--text-muted);"><i class="fa-solid fa-circle-info"></i> AI will auto-classify and route this complaint to the right department.</p>`,
@@ -192,18 +208,30 @@ const ComplaintsPage = (() => {
       if (!text) { Components.createToast("Please describe the issue.", "error"); return; }
       const btn = overlay.querySelector("#submitBtn");
       btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Classifying...`;
-      const projectId = overlay.querySelector("#cProject").value;
+      const projOpts = (Roles.visibleProjects(user, MockData.projects).length ? Roles.visibleProjects(user, MockData.projects) : MockData.projects).map(p => ({ id: p.id, label: p.title }));
+      const picked = Components.resolveTypedValue(overlay.querySelector("#cProject"), projOpts);
+      const projectId = picked.option ? picked.option.id : null;
       const project = MockData.projects.find(p => p.id === projectId);
       await API.createComplaint({ text, submitted_by: user.id });
       Components.createToast("Complaint submitted and routed by AI.", "success");
       overlay.remove();
       const newComplaint = { id: "CMP-" + Math.floor(Math.random()*9000+1000), submitted_by: user.id, submitted_by_type: user.role === "Client" ? "client" : "member",
-        customer_name: user.name, category: "Technical Issue", severity: overlay.querySelector("#cSeverity").value,
+        customer_name: user.name, category: "Technical Issue", severity: (overlay.querySelector("#cSeverity").value || "medium").toLowerCase(),
         status: "pending", department: project?.department || "Engineering & Design", project: project?.title || "N/A", text, sentiment: "Neutral",
         ai_summary: "Newly submitted complaint pending AI triage review.", confidence: 82, created_at: new Date().toISOString(), assignee: "Unassigned", resolution_note: "" };
       allComplaints.unshift(newComplaint);
+      MockData.complaints.unshift(newComplaint);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `complaints/${newComplaint.id}`);
+      // Notify whoever is responsible for triaging it.
+      MockData.addNotification({
+        title: "New complaint submitted",
+        body: `${newComplaint.id} — ${newComplaint.category} on ${newComplaint.project}.`,
+        icon: "fa-triangle-exclamation", type: "warning", link: "complaints.html",
+        target: { roles: ["Super Admin", "General Manager"], departments: [newComplaint.department] },
+      });
       visible = Roles.visibleComplaints(user, allComplaints);
       renderStats(); applyFilters();
+      if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
     });
   }
 

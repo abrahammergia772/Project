@@ -70,8 +70,13 @@ const DepartmentsPage = (() => {
     drawer.body.innerHTML = `
       <div class="flex items-center justify-between" style="margin-bottom:10px;">
         <span class="badge badge-${healthColor}">${detail.health.status} · AI score ${detail.health.score}/100</span>
-        <span style="font-size:12px; color:var(--text-muted);">Head: ${Utils.escapeHtml(detail.head)}</span>
+        <span style="font-size:12px; color:var(--text-muted);">Head: <b>${Utils.escapeHtml(detail.head || "Unassigned")}</b></span>
       </div>
+      ${Roles.canAssignDepartmentHead(user) ? `
+        <div class="dept-admin-actions">
+          <button class="btn btn-secondary btn-sm" id="changeHeadBtn"><i class="fa-solid fa-user-tie"></i> Change Head</button>
+          <button class="btn btn-secondary btn-sm" id="addEngineerBtn"><i class="fa-solid fa-user-plus"></i> Add Engineers</button>
+        </div>` : ""}
       <div class="card" style="background:rgba(var(--accent-rgb),0.08); border-left:3px solid var(--accent); margin-bottom:16px;">
         <div style="font-weight:700; font-size:12.5px; color:var(--accent); margin-bottom:6px;"><i class="fa-solid fa-robot"></i> AI Department Insight</div>
         <p style="font-size:13px; color:var(--text-secondary);">${Utils.escapeHtml(detail.health.summary)}</p>
@@ -132,6 +137,93 @@ const DepartmentsPage = (() => {
       tab.classList.add("active");
       renderDeptTab(tab.dataset.tab);
     }));
+
+    // Admin actions: appoint a head, move engineers in.
+    drawer.body.querySelector("#changeHeadBtn")?.addEventListener("click", () => openHeadModal(detail, user, drawer));
+    drawer.body.querySelector("#addEngineerBtn")?.addEventListener("click", () => openAddEngineersModal(detail, user, drawer));
+  }
+
+  // ---------------- Choose a department head (Super Admin / GM) ----------------
+  function openHeadModal(detail, user, drawer) {
+    const candidates = Roles.eligibleDepartmentHeads(MockData.members, detail.name);
+    Components.createModal({
+      title: `Head of ${detail.name}`,
+      bodyHtml: candidates.length ? `
+        <div class="field">
+          <label for="dhSelect">Department Head</label>
+          ${Components.createTypedInput({ id: "dhSelect", value: detail.head || "", placeholder: "Type a person's name...", allowNew: false, options: candidates.map(m => ({ id: m.id, label: m.full_name, sub: `${m.role} · ${m.experience_years}y` })) })}
+        </div>
+        <div class="field-hint"><i class="fa-solid fa-circle-info"></i> Only active managers and senior engineers already in this department can lead it.</div>`
+        : `<p style="font-size:13px;color:var(--text-muted);">There is nobody eligible in ${Utils.escapeHtml(detail.name)} yet. Add engineers to the department first.</p>`,
+      actionsHtml: `<button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button>
+        ${candidates.length ? `<button class="btn btn-primary" id="saveHeadBtn"><i class="fa-solid fa-check"></i> Appoint</button>` : ""}`,
+    });
+    const overlay = Utils.qs(".modal-overlay");
+    overlay.querySelector("#saveHeadBtn")?.addEventListener("click", async () => {
+      try {
+        const pickedHead = Components.resolveTypedValue(overlay.querySelector("#dhSelect"), candidates.map(m => ({ id: m.id, label: m.full_name })));
+        if (!pickedHead.option) { Components.createToast("Pick a person from the suggestions.", "error"); return; }
+        const updated = await API.setDepartmentHead(detail.name, pickedHead.option.id);
+        overlay.remove();
+        Components.createToast(`${updated.head} now heads ${detail.name}.`, "success");
+        drawer.close();
+        init();
+        if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
+      } catch (err) {
+        Components.createToast(err.message || "Could not appoint that head.", "error");
+      }
+    });
+  }
+
+  // ---------------- Move engineers into a department ----------------
+  function openAddEngineersModal(detail, user, drawer) {
+    // Anyone not already in this department is a candidate.
+    const candidates = MockData.members.filter(m =>
+      m.role !== "Client" && m.department !== detail.name && m.status === "Active");
+
+    Components.createModal({
+      title: `Add engineers to ${detail.name}`,
+      bodyHtml: `
+        <div class="input-wrap" style="margin-bottom:12px;">
+          <i class="fa-solid fa-magnifying-glass"></i>
+          <input class="input" id="aeSearch" placeholder="Search people...">
+        </div>
+        <div class="member-picker" id="aePicker">
+          ${candidates.map(m => `
+            <label class="member-pick" data-name="${Utils.escapeHtml(m.full_name.toLowerCase())}">
+              <input type="checkbox" value="${m.id}">
+              ${Components.createAvatar(m.full_name, "sm", m.avatar_color)}
+              <span><b>${Utils.escapeHtml(m.full_name)}</b><small>${Utils.escapeHtml(m.role)} · currently ${Utils.escapeHtml(m.department || "unassigned")}</small></span>
+            </label>`).join("") || `<div class="picker-empty">Everyone is already in this department.</div>`}
+        </div>
+        <div class="field-hint" style="margin-top:12px;"><i class="fa-solid fa-circle-info"></i> Moving someone reassigns them from their current department.</div>`,
+      actionsHtml: `<button class="btn btn-secondary" onclick="this.closest('.modal-overlay').remove()">Cancel</button><button class="btn btn-primary" id="saveEngineersBtn"><i class="fa-solid fa-check"></i> Add Selected</button>`,
+    });
+
+    const overlay = Utils.qs(".modal-overlay");
+    overlay.querySelector("#aeSearch").addEventListener("input", (e) => {
+      const q = e.target.value.toLowerCase();
+      Utils.qsa(".member-pick", overlay).forEach(row =>
+        row.classList.toggle("hidden", !!q && !row.dataset.name.includes(q)));
+    });
+
+    overlay.querySelector("#saveEngineersBtn").addEventListener("click", async () => {
+      const ids = Utils.qsa("#aePicker input:checked", overlay).map(c => c.value);
+      if (!ids.length) { Components.createToast("Select at least one person.", "error"); return; }
+      const btn = overlay.querySelector("#saveEngineersBtn");
+      btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Adding...`;
+      try {
+        for (const id of ids) await API.assignMemberToDepartment(id, detail.name);
+        overlay.remove();
+        Components.createToast(`${ids.length} member${ids.length > 1 ? "s" : ""} moved to ${detail.name}.`, "success");
+        drawer.close();
+        init();
+        if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
+      } catch (err) {
+        btn.disabled = false; btn.innerHTML = `<i class="fa-solid fa-check"></i> Add Selected`;
+        Components.createToast(err.message || "Could not move those members.", "error");
+      }
+    });
   }
 
   return { init };

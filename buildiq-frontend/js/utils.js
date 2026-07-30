@@ -22,6 +22,7 @@ const Utils = (() => {
       "Super Admin": "orange",
       "General Manager": "cyan",
       "Department Manager": "blue",
+      "Project Manager": "cyan",
       "Manager": "blue", // legacy alias
       "Engineer": "green",
       "Auditor": "purple",
@@ -35,6 +36,7 @@ const Utils = (() => {
       "Super Admin": "var(--accent)",
       "General Manager": "var(--cyan)",
       "Department Manager": "var(--blue)",
+      "Project Manager": "var(--cyan)",
       "Manager": "var(--blue)",
       "Engineer": "var(--green)",
       "Auditor": "var(--purple)",

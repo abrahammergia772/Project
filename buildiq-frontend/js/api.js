@@ -7,10 +7,12 @@
    ============================================================ */
 
 const API = (() => {
-  const API_BASE = BUILDIQ_CONFIG.API_BASE;
+  // Read the base URL at call time rather than snapshotting it at load, so it
+  // can be changed at runtime (tests, environment switching) and take effect.
+  const base = () => BUILDIQ_CONFIG.API_BASE;
 
   async function request(path, { method = "GET", body, params, auth = true } = {}) {
-    let url = `${API_BASE}${path}`;
+    let url = `${base()}${path}`;
     if (params) {
       const qs = new URLSearchParams(Object.entries(params).filter(([,v]) => v !== undefined && v !== null && v !== ""));
       const qsStr = qs.toString();
@@ -63,6 +65,7 @@ const API = (() => {
     let role = roleHint;
     if (!role) {
       if (e.includes("general") || e.includes("gm")) role = "General Manager";
+      else if (e.includes("project.manager") || e.startsWith("pm@")) role = "Project Manager";
       else if (e.includes("department") || e.includes("manager")) role = "Department Manager";
       else if (e.includes("engineer")) role = "Engineer";
       else if (e.includes("audit")) role = "Auditor";
@@ -80,12 +83,17 @@ const API = (() => {
     if (role === "Super Admin") member = MockData.getMemberById("mem_1");
     else if (role === "General Manager") member = MockData.getMemberById("mem_2");
     else if (role === "Department Manager") member = MockData.getMemberById("mem_dm_1"); // Site Operations manager
+    else if (role === "Project Manager") member = MockData.getMemberById("mem_pm_1");
     else if (role === "Auditor") member = MockData.getMemberById("mem_5");
     else member = MockData.getMemberById("mem_6"); // Engineer
 
     return {
       id: member.id, name: member.full_name, email: email || member.email, role: member.role,
       department: member.department, org_name: "Wolaita Construction Group", avatar: null,
+      job_title: member.job_title || null,
+      // Multi-role support: everything this person may act as.
+      roles: Array.isArray(member.roles) && member.roles.length ? member.roles : [member.role],
+      role_contexts: member.role_contexts || {},
     };
   }
 
@@ -250,6 +258,338 @@ const API = (() => {
       return list;
     },
     async submitComplaintFeedback() { await wait(300); return { ok: true }; },
+
+    // ---- Project / department staffing (Super Admin + General Manager) ----
+    async createProject(payload) {
+      await wait(600);
+      const user = Auth.getUser();
+      if (!Roles.canCreateProject(user)) throw new Error("Only an admin or general manager can create projects.");
+      if (!payload.title?.trim()) throw new Error("Project name is required.");
+
+      const manager = payload.manager_id ? MockData.getMemberById(payload.manager_id) : null;
+      if (payload.manager_id && !manager) throw new Error("The selected project manager was not found.");
+
+      const team = (payload.team_ids || [])
+        .map(id => MockData.getMemberById(id)).filter(Boolean);
+      if (manager && !team.some(m => m.id === manager.id)) team.unshift(manager);
+
+      const progress = Number(payload.progress) || 0;
+      const project = {
+        id: Utils.uid("proj"),
+        title: payload.title.trim(),
+        type: payload.type || "Residential",
+        region: payload.region || "N/A",
+        department: payload.department || null,
+        manager_id: manager?.id || null,
+        manager_name: manager?.full_name || null,
+        manager_role: manager?.role || null,
+        client_id: payload.client_id || null,
+        client_name: MockData.getClientById(payload.client_id)?.company || null,
+        status: progress > 0 ? "In Progress" : "Planning",
+        progress,
+        expected_progress: Number(payload.expected_progress) || 5,
+        delay_risk: "LOW",
+        budget: Number(payload.budget) || 0,
+        spent: 0,
+        deadline: payload.deadline ? new Date(payload.deadline).toISOString() : new Date(Date.now() + 90 * 86400000).toISOString(),
+        team,
+        tasks_total: 0,
+        tasks_done: 0,
+        delay_reasons: [],
+        description: payload.description || "Newly created project.",
+        materials: [],
+        materials_total_cost: 0,
+      };
+      MockData.projects.unshift(project);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `projects/${project.id}`);
+
+      if (manager) {
+        MockData.addNotification({
+          title: "You were made project manager",
+          body: `${user.name} assigned you to manage "${project.title}".`,
+          icon: "fa-diagram-project", type: "info", link: "projects.html",
+          target: { user_ids: [manager.id] },
+        });
+      }
+      return project;
+    },
+
+    async createDepartment(payload) {
+      await wait(450);
+      const user = Auth.getUser();
+      if (!Roles.canAssignDepartmentHead(user)) throw new Error("Only an admin or general manager can create departments.");
+      const res = MockData.createDepartment(payload);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `departments/${res.department.id}`);
+      if (res.department.head_id) {
+        MockData.addNotification({
+          title: "You were appointed department head",
+          body: `${user.name} appointed you head of ${res.department.name}.`,
+          icon: "fa-user-tie", type: "success", link: "departments.html",
+          target: { user_ids: [res.department.head_id] },
+        });
+      }
+      return res.department;
+    },
+
+    async createMemberRecord(payload) {
+      await wait(450);
+      const user = Auth.getUser();
+      if (!Roles.canAssignEngineerToDepartment(user)) throw new Error("Only an admin or general manager can add members.");
+      const res = MockData.createMember(payload);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `members/${res.member.id}`);
+      return res.member;
+    },
+
+    async createClientRecord(payload) {
+      await wait(400);
+      const user = Auth.getUser();
+      if (!Roles.canCreateProject(user)) throw new Error("Only an admin or general manager can add clients.");
+      const res = MockData.createClient(payload);
+      if (!res.ok) throw new Error(res.error);
+      if (!res.existed) MockData.logAuditEvent(user, "UPDATE_RECORD", `clients/${res.client.id}`);
+      return res.client;
+    },
+
+    async setProjectManager(projectId, memberId) {
+      await wait(400);
+      const user = Auth.getUser();
+      if (!Roles.canAssignProjectManager(user)) throw new Error("Only an admin or general manager can change the project manager.");
+      const res = MockData.setProjectManager(projectId, memberId);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "PERMISSION_CHANGE", `projects/${projectId}/manager`);
+      MockData.addNotification({
+        title: "You were made project manager",
+        body: `${user.name} assigned you to manage "${res.project.title}".`,
+        icon: "fa-diagram-project", type: "info", link: "projects.html",
+        target: { user_ids: [memberId] },
+      });
+      return res.project;
+    },
+
+    async setDepartmentHead(departmentName, memberId) {
+      await wait(400);
+      const user = Auth.getUser();
+      if (!Roles.canAssignDepartmentHead(user)) throw new Error("Only an admin or general manager can appoint a department head.");
+      const res = MockData.setDepartmentHead(departmentName, memberId);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "PERMISSION_CHANGE", `departments/${departmentName}/head`);
+      MockData.addNotification({
+        title: "You were appointed department head",
+        body: `${user.name} appointed you head of ${departmentName}.`,
+        icon: "fa-user-tie", type: "success", link: "departments.html",
+        target: { user_ids: [memberId] },
+      });
+      return res.department;
+    },
+
+    async assignMemberToDepartment(memberId, departmentName) {
+      await wait(400);
+      const user = Auth.getUser();
+      if (!Roles.canAssignEngineerToDepartment(user)) throw new Error("Only an admin or general manager can move members between departments.");
+      const res = MockData.assignMemberToDepartment(memberId, departmentName);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `members/${memberId}/department`);
+      MockData.addNotification({
+        title: "Your department changed",
+        body: `${user.name} moved you to ${departmentName}.`,
+        icon: "fa-building", type: "info", link: "departments.html",
+        target: { user_ids: [memberId] },
+      });
+      return res.member;
+    },
+
+    // ---- Attendance: take register + absence reasons ----
+    async saveAttendance(date, marks) {
+      await wait(500);
+      const user = Auth.getUser();
+      if (!Roles.canTakeAttendance(user)) {
+        throw new Error("Only the Workforce & Attendance department can take attendance.");
+      }
+      let saved = 0;
+      marks.forEach(m => {
+        const existing = MockData.attendance.find(a => a.person_id === m.person_id && a.date === date);
+        if (existing) {
+          existing.status = m.status;
+          existing.check_in = m.status === "Absent" ? null : (existing.check_in || "08:00");
+          existing.recorded_by = user.name;
+          if (m.status === "Absent" && !existing.reason_status) existing.reason_status = "Not Submitted";
+          if (m.status === "Present") existing.reason_status = null;
+        } else {
+          const staff = MockData.getMemberById(m.person_id);
+          const worker = MockData.getDailyWorkerById(m.person_id);
+          MockData.attendance.push({
+            id: Utils.uid("att"),
+            person_id: m.person_id,
+            person_name: (staff || worker || {}).full_name || m.person_id,
+            person_type: m.person_type,
+            department: (staff || worker || {}).department || null,
+            project_id: (worker || {}).project_id || null,
+            project_title: (worker || {}).project_title || null,
+            date, status: m.status,
+            check_in: m.status === "Absent" ? null : "08:00",
+            recorded_by: user.name,
+            reason: null, reason_category: null, reason_submitted_at: null,
+            reason_status: m.status === "Absent" ? "Not Submitted" : null,
+            reason_reviewed_by: null, reason_reviewed_at: null, reason_review_note: null,
+          });
+        }
+        saved++;
+      });
+      return { ok: true, saved };
+    },
+
+    async myAttendance() {
+      await wait(300);
+      const user = Auth.getUser();
+      return Roles.ownAttendance(user, MockData.attendance)
+        .sort((a, b) => b.date.localeCompare(a.date));
+    },
+
+    async submitAbsenceReason(date, payload) {
+      await wait(450);
+      const user = Auth.getUser();
+      const res = MockData.submitAbsenceReason(user.id, date, payload);
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "LATE_SUBMISSION", `attendance/${date}/reason`);
+      // Let the reviewers know something is waiting for them.
+      MockData.addNotification({
+        title: "Absence reason submitted",
+        body: `${user.name} explained their absence on ${date} (${res.record.reason_category}).`,
+        icon: "fa-comment-dots", type: "info", link: "attendance.html",
+        target: {
+          roles: ["Super Admin", "General Manager"],
+          departments: [res.record.department, Roles.WORKFORCE_DEPT].filter(Boolean),
+        },
+      });
+      return res.record;
+    },
+
+    async reviewAbsenceReason(personId, date, payload) {
+      await wait(400);
+      const user = Auth.getUser();
+      const record = MockData.attendance.find(a => a.person_id === personId && a.date === date);
+      if (!Roles.canReviewAbsenceReason(user, record)) {
+        throw new Error("You cannot review this absence reason.");
+      }
+      const res = MockData.reviewAbsenceReason(personId, date, { ...payload, reviewer: user });
+      if (!res.ok) throw new Error(res.error);
+      MockData.logAuditEvent(user, "APPROVAL_BYPASS", `attendance/${date}/reason/${payload.decision.toLowerCase()}`);
+      MockData.addNotification({
+        title: `Absence reason ${payload.decision.toLowerCase()}`,
+        body: `Your reason for ${date} was ${payload.decision.toLowerCase()} by ${user.name}.`,
+        icon: payload.decision === "Accepted" ? "fa-circle-check" : "fa-circle-xmark",
+        type: payload.decision === "Accepted" ? "success" : "error",
+        link: "attendance.html",
+        target: { user_ids: [personId] },
+      });
+      return res.record;
+    },
+
+    // ---- Task assignment (Dept Manager / GM / Auditor / Super Admin) ----
+    async assignTask(payload) {
+      await wait(500);
+      const user = Auth.getUser();
+      if (!Roles.canAssignTasks(user.role)) throw new Error("You cannot assign tasks.");
+
+      const targets = Roles.assignableWorkers(user, MockData.members, MockData.dailyWorkers);
+      const target = targets.find(t => t.id === payload.assignee_id);
+      if (!target) throw new Error("That worker is not in your assignable scope.");
+
+      const project = MockData.getProjectById(payload.project_id);
+      const task = {
+        id: Utils.uid("task"),
+        title: payload.title,
+        category: payload.category || "Coordination",
+        assignee_id: target.id,
+        assignee_name: target.name,
+        assignee_type: target.type,
+        department: target.department,
+        project_id: project?.id || null,
+        project_title: project?.title || "General",
+        project_risk: project?.delay_risk || "LOW",
+        status: "To Do",
+        blocking: !!payload.blocking,
+        estimated_hours: Number(payload.estimated_hours) || 2,
+        due_date: payload.due_date ? new Date(payload.due_date).toISOString() : new Date(Date.now() + 3 * 86400000).toISOString(),
+        created_at: new Date().toISOString(),
+        assigned_by: user.name,
+        assigned_by_role: user.role,
+        note: payload.note || "",
+      };
+      MockData.tasks.unshift(task);
+      MockData.logAuditEvent(user, "UPDATE_RECORD", `tasks/${task.id}`);
+      MockData.addNotification({
+        title: "New task assigned to you",
+        body: `${user.name} (${user.role}) assigned "${task.title}" — due ${new Date(task.due_date).toDateString()}.`,
+        icon: "fa-list-check", type: "info", link: "tasks.html",
+        target: { user_ids: [target.id] },
+      });
+      return task;
+    },
+
+    // ---- Notifications ----
+    async notifications() {
+      await wait(200);
+      const user = Auth.getUser();
+      return MockData.notificationsFor(user).map(n => ({ ...n, read: n.read_by.includes(user.id) }));
+    },
+    async markNotificationRead(id) {
+      await wait(120);
+      MockData.markNotificationRead(Auth.getUser(), id);
+      return { ok: true };
+    },
+    async markAllNotificationsRead() {
+      await wait(150);
+      MockData.markAllNotificationsRead(Auth.getUser());
+      return { ok: true };
+    },
+
+    // ---- Documents ----
+    async documents() {
+      await wait(300);
+      return MockData.documentsFor(Auth.getUser());
+    },
+    async uploadDocument(file) {
+      await wait(600);
+      const user = Auth.getUser();
+      const doc = MockData.addDocument(file, user);
+      MockData.logAuditEvent(user, "FILE_UPLOAD", `documents/${doc.name}`);
+      return doc;
+    },
+    async deleteDocument(id) {
+      await wait(300);
+      const user = Auth.getUser();
+      const doc = MockData.documents.find(d => d.id === id);
+      MockData.removeDocument(id);
+      if (doc) MockData.logAuditEvent(user, "DELETE_DOCUMENT", `documents/${doc.name}`);
+      return { ok: true };
+    },
+
+    // ---- Password reset ----
+    async requestPasswordReset(email) {
+      await wait(600);
+      const token = MockData.createPasswordResetToken(email);
+      // Mock mode has no mail server, so we hand the link straight back to the UI.
+      return { ok: true, demo_token: token, message: "If that email exists, a reset link has been sent." };
+    },
+    async resetPassword(token, newPassword) {
+      await wait(600);
+      const res = MockData.consumePasswordResetToken(token);
+      if (!res.ok) { const e = new Error(res.error); e.__toasted = false; throw e; }
+      return { ok: true, email: res.email };
+    },
+
+    async refreshToken() {
+      await wait(150);
+      const user = Auth.getUser();
+      return {
+        token: "mock." + btoa(JSON.stringify({ role: user?.role, email: user?.email, r: Date.now() })) + ".token",
+        user,
+        expires: Date.now() + 1000 * 60 * 60 * 24,
+      };
+    },
     async suggestComplaintSolution(complaint) {
       await wait(700);
       return { solution: AIEngine.suggestComplaintSolution(complaint) };
@@ -325,6 +665,45 @@ const API = (() => {
 
     logout: () => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve({ok:true}) : request("/auth/logout", { method: "POST" }),
 
+    refreshToken: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.refreshToken()
+      : request("/auth/refresh", { method: "POST" }),
+
+    requestPasswordReset: (email) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.requestPasswordReset(email)
+      : request("/auth/forgot-password", { method: "POST", body: { email }, auth: false }),
+
+    resetPassword: (token, new_password) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.resetPassword(token, new_password)
+      : request("/auth/reset-password", { method: "POST", body: { token, new_password }, auth: false }),
+
+    // Notifications
+    getNotifications: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.notifications() : request("/notifications"),
+    markNotificationRead: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.markNotificationRead(id) : request(`/notifications/${id}/read`, { method: "PUT" }),
+    markAllNotificationsRead: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.markAllNotificationsRead() : request("/notifications/read-all", { method: "PUT" }),
+
+    // Documents
+    getDocuments: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.documents() : request("/documents"),
+    uploadDocument: (file) => {
+      if (BUILDIQ_CONFIG.MOCK_MODE) return Mock.uploadDocument(file);
+      const fd = new FormData();
+      fd.append("file", file);
+      return fetch(`${base()}/documents`, {
+        method: "POST",
+        headers: Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {},
+        body: fd,
+      }).then(async res => {
+        if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || "Upload failed");
+        return res.json();
+      });
+    },
+    downloadDocument: (id) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(null) // handled locally from the stored Blob
+      : fetch(`${base()}/documents/${id}/download`, {
+          headers: Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {},
+        }).then(res => { if (!res.ok) throw new Error("Download failed"); return res.blob(); }),
+    deleteDocument: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.deleteDocument(id) : request(`/documents/${id}`, { method: "DELETE" }),
+
     // Members
     getMembers: (params) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.members(params) : request("/members", { params }),
     createMember: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve({ ...payload, id: Utils.uid("mem") }) : request("/members", { method: "POST", body: payload }),
@@ -343,12 +722,43 @@ const API = (() => {
 
     // Projects
     getProjects: (params) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.projects(params) : request("/projects", { params }),
-    createProject: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve({ ...payload, id: Utils.uid("proj") }) : request("/projects", { method: "POST", body: payload }),
+    createProject: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.createProject(payload) : request("/projects", { method: "POST", body: payload }),
+    createDepartment: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.createDepartment(payload)
+      : request("/departments", { method: "POST", body: payload }),
+    createMemberRecord: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.createMemberRecord(payload)
+      : request("/members", { method: "POST", body: payload }),
+    createClientRecord: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.createClientRecord(payload)
+      : request("/clients", { method: "POST", body: payload }),
+    setProjectManager: (projectId, memberId) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.setProjectManager(projectId, memberId)
+      : request(`/projects/${projectId}/manager`, { method: "PUT", body: { manager_id: memberId } }),
+    setDepartmentHead: (department, memberId) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.setDepartmentHead(department, memberId)
+      : request(`/departments/${encodeURIComponent(department)}/head`, { method: "PUT", body: { member_id: memberId } }),
+    assignMemberToDepartment: (memberId, department) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.assignMemberToDepartment(memberId, department)
+      : request(`/members/${memberId}/department`, { method: "PUT", body: { department } }),
     updateProject: (id, payload) => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve({ ...payload, id }) : request(`/projects/${id}`, { method: "PUT", body: payload }),
     analyzeProject: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.analyzeProject(id) : request(`/projects/${id}/analyze`, { method: "POST" }),
 
+    // Attendance (Workforce & Attendance dept takes it; everyone explains their own absences)
+    saveAttendance: (date, marks) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.saveAttendance(date, marks)
+      : request("/attendance", { method: "POST", body: { date, marks } }),
+    getMyAttendance: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.myAttendance() : request("/attendance/me"),
+    submitAbsenceReason: (date, payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.submitAbsenceReason(date, payload)
+      : request(`/attendance/${date}/reason`, { method: "POST", body: payload }),
+    reviewAbsenceReason: (personId, date, payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.reviewAbsenceReason(personId, date, payload)
+      : request(`/attendance/${personId}/${date}/reason/review`, { method: "PUT", body: payload }),
+
     // Tasks (#5 — AI priority + scheduling)
     getTasks: (params) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.tasks(params) : request("/tasks", { params }),
+    assignTask: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.assignTask(payload) : request("/tasks/assign", { method: "POST", body: payload }),
     aiPrioritizeTasks: (tasks) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.prioritizeTasks(tasks) : request("/tasks/ai/prioritize", { method: "POST", body: { tasks } }),
     aiAutoSchedule: (tasks) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.autoSchedule(tasks) : request("/tasks/ai/schedule", { method: "POST", body: { tasks } }),
 

@@ -22,3 +22,139 @@
 
 @media (max-width: 1100px) { .audit-stats { grid-template-columns: repeat(3,1fr); } }
 @media (max-width: 640px) { .audit-stats { grid-template-columns: repeat(2,1fr); } }
+
+/* ============================================================
+   7 Audit Types — taxonomy UI
+   ============================================================ */
+
+/* ---------- Type filter chips ---------- */
+.audit-type-filter {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin-bottom: 4px; padding-bottom: 4px;
+}
+.type-chip {
+  --chip-color: var(--text-muted);
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 7px 13px; border-radius: 100px;
+  border: 1px solid var(--border); background: var(--bg-card);
+  color: var(--text-secondary); font-size: 12.5px; font-weight: 600;
+  cursor: pointer; transition: all var(--t-base); white-space: nowrap;
+}
+.type-chip i { font-size: 12px; color: var(--chip-color); }
+.type-chip:hover { border-color: var(--chip-color); color: var(--text-primary); }
+.type-chip.active {
+  border-color: var(--chip-color);
+  background: color-mix(in srgb, var(--chip-color) 14%, transparent);
+  color: var(--text-primary);
+}
+.type-chip-count {
+  display: inline-block; min-width: 20px; padding: 1px 6px;
+  border-radius: 100px; background: var(--bg-input);
+  font-size: 11px; font-weight: 700; text-align: center; color: var(--text-muted);
+}
+.type-chip.active .type-chip-count { background: var(--chip-color); color: #fff; }
+
+/* ---------- Inline type pill (tables, cards) ---------- */
+.type-pill {
+  --type-color: var(--text-muted);
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 9px; border-radius: 100px;
+  background: color-mix(in srgb, var(--type-color) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--type-color) 40%, transparent);
+  color: var(--type-color); font-size: 11.5px; font-weight: 600; white-space: nowrap;
+}
+.type-pill i { font-size: 11px; }
+
+/* ---------- Audit Types overview grid ---------- */
+.audit-types-intro {
+  font-size: 13px; color: var(--text-muted);
+  max-width: 720px; line-height: 1.65; margin-bottom: 16px;
+}
+.audit-types-grid {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 16px;
+}
+.audit-type-card {
+  --type-color: var(--accent);
+  position: relative; display: flex; flex-direction: column;
+  padding: 18px; border-radius: var(--radius-lg);
+  border: 1px solid var(--border); background: var(--bg-card);
+  cursor: pointer; overflow: hidden;
+  transition: transform var(--t-base), border-color var(--t-base), box-shadow var(--t-base);
+}
+.audit-type-card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--type-color);
+}
+.audit-type-card:hover, .audit-type-card:focus-visible {
+  transform: translateY(-3px);
+  border-color: color-mix(in srgb, var(--type-color) 55%, transparent);
+  box-shadow: 0 12px 30px rgba(0,0,0,0.26);
+  outline: none;
+}
+.atc-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.atc-icon {
+  flex-shrink: 0; width: 42px; height: 42px; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center; font-size: 17px;
+  background: color-mix(in srgb, var(--type-color) 16%, transparent);
+  color: var(--type-color);
+}
+.atc-title { flex: 1; min-width: 0; position: relative; padding-right: 26px; }
+.atc-title h3 { font-size: 14.5px; font-weight: 700; color: var(--text-primary); margin: 0 0 3px; }
+.atc-title p { font-size: 12px; color: var(--text-muted); margin: 0; line-height: 1.5; }
+.atc-num {
+  position: absolute; top: 0; right: 0;
+  width: 20px; height: 20px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-input); color: var(--text-muted);
+  font-size: 10.5px; font-weight: 700;
+}
+.atc-signals { list-style: none; margin: 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 7px; }
+.atc-signals li {
+  display: flex; align-items: flex-start; gap: 8px;
+  font-size: 12.5px; color: var(--text-secondary); line-height: 1.5;
+}
+.atc-signals i { font-size: 10px; margin-top: 4px; color: var(--type-color); flex-shrink: 0; }
+.atc-footer {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border);
+}
+.atc-ml {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; color: var(--type-color);
+}
+.atc-metrics { display: flex; gap: 12px; font-size: 11.5px; color: var(--text-muted); }
+.atc-metrics b { color: var(--text-primary); font-weight: 700; }
+.atc-metrics .is-flagged b { color: var(--red); }
+.atc-health { display: flex; align-items: center; gap: 9px; margin-top: 11px; }
+.atc-health-bar { flex: 1; height: 5px; border-radius: 100px; background: var(--bg-input); overflow: hidden; }
+.atc-health-bar span { display: block; height: 100%; border-radius: 100px; background: var(--type-color); transition: width var(--t-slow); }
+.atc-health-label { font-size: 11px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
+
+/* ---------- Type strip on anomaly cards ---------- */
+.audit-card-type {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-top: 12px;
+  padding: 8px 10px; border-radius: var(--radius);
+  background: color-mix(in srgb, var(--type-color) 8%, transparent);
+  border: 1px solid color-mix(in srgb, var(--type-color) 22%, transparent);
+}
+.audit-card-ml {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; color: var(--type-color);
+}
+
+/* ---------- Rules grouped by type ---------- */
+.rules-group { margin-bottom: 18px; }
+.rules-group-head {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; flex-wrap: wrap; margin-bottom: 9px;
+}
+.rules-group-ml {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; font-weight: 600; color: var(--type-color);
+}
+
+@media (max-width: 640px) {
+  .audit-types-grid { grid-template-columns: 1fr; }
+  .audit-type-filter { overflow-x: auto; flex-wrap: nowrap; padding-bottom: 8px; }
+}

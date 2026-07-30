@@ -8,19 +8,24 @@ const Router = (() => {
   // Access matrix (updated for the 6-role model)
   // true = full access, "own" = read own/department data only, false = no access
   const ACCESS = {
-    dashboard:        { "Super Admin": true, "General Manager": true, "Department Manager": true,  "Engineer": true,  "Auditor": true,  "Client": true  },
-    members:          { "Super Admin": true, "General Manager": true, "Department Manager": "own",  "Engineer": "own", "Auditor": false, "Client": false },
-    departments:      { "Super Admin": true, "General Manager": true, "Department Manager": "own",  "Engineer": "own", "Auditor": true,  "Client": false },
-    projects:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": "own", "Auditor": false, "Client": "own" },
-    tasks:            { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": true,  "Auditor": false, "Client": false },
-    complaints:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": true,  "Auditor": false, "Client": true  },
-    attendance:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": false, "Auditor": true,  "Client": false },
-    audit:            { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Engineer": false, "Auditor": true,  "Client": false },
-    reports:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": false, "Auditor": true,  "Client": true  },
-    chatbot:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": true,  "Auditor": false, "Client": true  },
-    documents:        { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": true,  "Auditor": true,  "Client": true  },
-    settings:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Engineer": true,  "Auditor": true,  "Client": true  },
-    user_management:  { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Engineer": false, "Auditor": false, "Client": false },
+    dashboard:        { "Super Admin": true, "General Manager": true, "Department Manager": true,  "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
+    members:          { "Super Admin": true, "General Manager": true, "Department Manager": "own",  "Project Manager": "own", "Engineer": "own", "Auditor": false, "Client": false },
+    departments:      { "Super Admin": true, "General Manager": true, "Department Manager": "own",  "Project Manager": "own", "Engineer": "own", "Auditor": true,  "Client": false },
+    // Auditor now has full org-wide project visibility (read-only), alongside
+    // Super Admin and General Manager. Everyone else sees only their own work.
+    projects:         { "Super Admin": true, "General Manager": true, "Department Manager": "own",  "Project Manager": "own", "Engineer": "own", "Auditor": true,  "Client": "own" },
+    // Auditor gets task access so they can assign remedial/compliance work.
+    tasks:            { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": false },
+    complaints:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": false, "Client": true  },
+    // Engineers get "own" access: they can't take attendance or see the org
+    // register, but they can review their own absence days and explain them.
+    attendance:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": "own", "Engineer": "own", "Auditor": true,  "Client": false },
+    audit:            { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": true,  "Client": false },
+    reports:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": false, "Auditor": true,  "Client": true  },
+    chatbot:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": false, "Client": true  },
+    documents:        { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
+    settings:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
+    user_management:  { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": false, "Client": false },
   };
 
   function pageKeyFromFile(file) {
@@ -51,6 +56,8 @@ const Router = (() => {
       return false;
     }
     Auth.maybeRefresh();
+    // Re-apply the role the user last switched to, before any access check.
+    Auth.restoreActiveRole();
     const pageKey = currentPageKey();
     if (pageKey === "index") return true;
 

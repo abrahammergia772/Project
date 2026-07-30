@@ -31,6 +31,7 @@ const Auth = (() => {
     localStorage.removeItem(TOKEN_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem(EXPIRES_KEY);
+    localStorage.removeItem("buildiq_active_role");
   }
 
   async function login(email, password) {
@@ -50,22 +51,106 @@ const Auth = (() => {
     if (!silent) window.location.href = "index.html";
   }
 
+  // ---------------- Multi-role support ----------------
+  // A person can hold several roles (e.g. a Department Manager who also runs
+  // projects). `user.roles` lists them all; `user.role` is whichever one is
+  // currently active. Every other module keeps reading `user.role`, so nothing
+  // else needs to know about this.
+  const ACTIVE_ROLE_KEY = "buildiq_active_role";
+
+  function getRoles() {
+    const user = getUser();
+    if (!user) return [];
+    const list = Array.isArray(user.roles) && user.roles.length ? user.roles : [user.role];
+    // De-duplicate while preserving order, and drop anything falsy.
+    return [...new Set(list.filter(Boolean))];
+  }
+
+  function hasMultipleRoles() { return getRoles().length > 1; }
+
+  function getActiveRole() {
+    const user = getUser();
+    return user ? user.role : null;
+  }
+
+  // Per-role overrides (department differs by hat, e.g. a PM isn't
+  // department-scoped). Stored on the user as `role_contexts`.
+  function contextFor(user, role) {
+    const ctx = (user.role_contexts || {})[role] || {};
+    return {
+      department: "department" in ctx ? ctx.department : user.department,
+      job_title: ctx.job_title || user.job_title || null,
+    };
+  }
+
+  function switchRole(role) {
+    const user = getUser();
+    if (!user) return false;
+    const roles = getRoles();
+    if (!roles.includes(role)) return false;      // never grant a role they don't hold
+    if (user.role === role) return true;          // already active
+
+    const ctx = contextFor(user, role);
+    const updated = { ...user, role, department: ctx.department, job_title: ctx.job_title };
+
+    localStorage.setItem(USER_KEY, JSON.stringify(updated));
+    localStorage.setItem(ACTIVE_ROLE_KEY, role);
+
+    // Leave a trail — switching hats is a permission-relevant action.
+    try {
+      if (window.MockData?.logAuditEvent) {
+        MockData.logAuditEvent(updated, "ROLE_MISUSE", `auth/role-switch/${role}`);
+      }
+    } catch { /* auditing must never block the switch */ }
+
+    return true;
+  }
+
+  // Restore the last active role on load, if it's still one they hold.
+  function restoreActiveRole() {
+    const user = getUser();
+    if (!user) return;
+    const saved = localStorage.getItem(ACTIVE_ROLE_KEY);
+    if (saved && saved !== user.role && getRoles().includes(saved)) {
+      switchRole(saved);
+    }
+  }
+
   function hasRole(...roles) {
     const user = getUser();
     return !!user && roles.includes(user.role);
   }
 
-  // Auto-refresh stub: if token expiring in <5min, in mock mode just extend it.
+  // True if the person holds the role at all, whether or not it's active.
+  function holdsRole(role) { return getRoles().includes(role); }
+
+  // If the token expires in under 5 minutes, refresh it. In mock mode this just
+  // mints a new fake token; in real mode it calls POST /auth/refresh.
+  let refreshing = null;
   function maybeRefresh() {
-    if (!isLoggedIn()) return;
+    if (!isLoggedIn()) return Promise.resolve(false);
     const msLeft = getExpiry() - Date.now();
-    if (msLeft < 5 * 60 * 1000) {
-      if (BUILDIQ_CONFIG.MOCK_MODE) {
-        localStorage.setItem(EXPIRES_KEY, String(Date.now() + 1000 * 60 * 60 * 24));
-      }
-      // Real mode would call API.refresh() here.
-    }
+    if (msLeft >= 5 * 60 * 1000) return Promise.resolve(false);
+    if (refreshing) return refreshing;
+
+    refreshing = API.refreshToken()
+      .then(res => {
+        // Keep the existing user object if the server didn't return one.
+        setSession({ token: res.token, user: res.user || getUser(), expires: res.expires });
+        return true;
+      })
+      .catch(() => {
+        // Refresh failed — the session is no longer trustworthy.
+        logout({ silent: true });
+        window.location.href = "index.html";
+        return false;
+      })
+      .finally(() => { refreshing = null; });
+
+    return refreshing;
   }
 
-  return { getToken, getUser, getExpiry, isLoggedIn, setSession, clearSession, login, signup, logout, hasRole, maybeRefresh };
+  return { getToken, getUser, getExpiry, isLoggedIn, setSession, clearSession, login, signup, logout,
+    hasRole, holdsRole, maybeRefresh,
+    getRoles, hasMultipleRoles, getActiveRole, switchRole, restoreActiveRole };
 })();

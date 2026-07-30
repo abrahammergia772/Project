@@ -93,7 +93,7 @@
             </div>
           </div>
 
-          <a href="#" class="forgot-link">Forgot password?</a>
+          <a href="#" class="forgot-link" id="showForgot">Forgot password?</a>
 
           <button type="submit" class="btn btn-primary btn-block" id="loginSubmitBtn">
             <span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>
@@ -106,6 +106,7 @@
           <button class="role-chip" data-role="Super Admin">Super Admin</button>
           <button class="role-chip" data-role="General Manager">General Manager</button>
           <button class="role-chip" data-role="Department Manager">Dept. Manager</button>
+          <button class="role-chip" data-role="Project Manager">Project Manager</button>
           <button class="role-chip" data-role="Engineer">Engineer</button>
           <button class="role-chip" data-role="Auditor">Auditor</button>
           <button class="role-chip" data-role="Client">Client</button>
@@ -181,6 +182,11 @@
                 <span class="role-name">Department Manager</span>
                 <span class="role-desc">Department management. Projects, complaints, team members, department-level reports.</span>
               </button>
+              <button type="button" class="role-card" data-role="Project Manager">
+                <i class="fa-solid fa-diagram-project role-icon"></i>
+                <span class="role-name">Project Manager</span>
+                <span class="role-desc">Run specific projects end to end — team, tasks, materials, progress and complaints.</span>
+              </button>
               <button type="button" class="role-card" data-role="Engineer">
                 <i class="fa-solid fa-helmet-safety role-icon"></i>
                 <span class="role-name">Engineer</span>
@@ -199,44 +205,47 @@
             </div>
 
             <div id="internalOrgFields">
+              <!-- Each field is individually wrapped so it can be shown or hidden
+                   per role — see ROLE_FIELDS in the script below. Anything a role
+                   doesn't need is never asked for, and is derived on submit. -->
+              <div class="role-scope-note" id="roleScopeNote"></div>
               <div class="two-col">
-                <div class="field">
+                <div class="field" data-field="orgName">
                   <label for="orgName">Organization Name</label>
                   <input class="input" type="text" id="orgName" placeholder="Wolaita Construction Group">
                 </div>
-                <div class="field">
+                <div class="field" data-field="orgType">
                   <label for="orgType">Organization Type</label>
-                  <select class="input" id="orgType">
-                    <option value="">Select type</option>
-                    <option>General Contractor</option>
-                    <option>Subcontractor</option>
-                    <option>Consultancy</option>
-                    <option>Government Body</option>
-                    <option>Real Estate Developer</option>
-                  </select>
+                  <input class="input" id="orgType" list="orgTypeList" placeholder="Type an organization type..." autocomplete="off">
+                  <datalist id="orgTypeList">
+                    <option value="General Contractor"><option value="Subcontractor"><option value="Consultancy">
+                    <option value="Government Body"><option value="Real Estate Developer">
+                  </datalist>
                 </div>
               </div>
               <div class="two-col">
-                <div class="field">
+                <div class="field" data-field="department">
                   <label for="department">Department</label>
-                  <select class="input" id="department">
-                    <option value="">Select department</option>
-                    <option>Site Operations</option>
-                    <option>Engineering & Design</option>
-                    <option>Finance & Budget</option>
-                    <option>Health & Safety</option>
-                    <option>Human Resources</option>
-                    <option>Quality Control</option>
-                    <option>Procurement & Supply</option>
-                    <option>Client Relations</option>
-                  </select>
+                  <!-- Options are populated at runtime from MockData.departments
+                       so this list can never drift out of sync with the org. -->
+                  <input class="input" id="department" list="departmentList" placeholder="Type a department..." autocomplete="off">
+                  <datalist id="departmentList"></datalist>
+                  <div class="field-hint hidden" id="departmentHint"></div>
                 </div>
-                <div class="field">
+                <div class="field" data-field="jobTitle">
                   <label for="jobTitle">Job Title</label>
                   <input class="input" type="text" id="jobTitle" placeholder="Site Engineer">
                 </div>
+                <div class="field" data-field="projectName">
+                  <label for="projectName">Project</label>
+                  <!-- Project Managers are defined by the project they run rather
+                       than a department; the department is derived from it. -->
+                  <input class="input" id="projectName" list="projectNameList" placeholder="Type the project you manage..." autocomplete="off">
+                  <datalist id="projectNameList"></datalist>
+                  <div class="field-hint hidden" id="projectNameHint"></div>
+                </div>
               </div>
-              <div class="field">
+              <div class="field" data-field="experience">
                 <label for="experience">Years of Experience</label>
                 <input class="input" type="number" min="0" max="50" id="experience" placeholder="e.g. 4">
               </div>
@@ -249,9 +258,8 @@
               </div>
               <div class="field">
                 <label for="clientProject">Which project are you associated with?</label>
-                <select class="input" id="clientProject">
-                  <option value="">Select project (or leave blank if not yet assigned)</option>
-                </select>
+                <input class="input" id="clientProject" list="clientProjectList" placeholder="Type your project name (optional)..." autocomplete="off">
+                <datalist id="clientProjectList"></datalist>
               </div>
             </div>
 
@@ -304,6 +312,87 @@
         <p class="switch-link">Already have an account? <a href="#" id="showLogin">Sign In</a></p>
       </section>
 
+      <!-- ---------- FORGOT PASSWORD VIEW ---------- -->
+      <section id="forgotView" class="hidden">
+        <div class="auth-heading">
+          <h2>Reset your password</h2>
+          <p>Enter the email associated with your BuildIQ account and we'll send you a reset link.</p>
+        </div>
+
+        <form id="forgotForm" novalidate>
+          <div class="field">
+            <label for="forgotEmail">Email Address</label>
+            <div class="input-wrap">
+              <i class="fa-solid fa-envelope input-icon"></i>
+              <input class="input" type="email" id="forgotEmail" placeholder="you@company.com" required>
+            </div>
+            <div class="field-error hidden" id="forgotEmailError">Please enter a valid email address.</div>
+          </div>
+          <button type="submit" class="btn btn-primary btn-block" id="forgotSubmitBtn">
+            <span>Send Reset Link</span> <i class="fa-solid fa-paper-plane"></i>
+          </button>
+        </form>
+
+        <div id="forgotSent" class="hidden" style="margin-top:18px;">
+          <div class="auth-note">
+            <i class="fa-solid fa-circle-check" style="color:var(--green);"></i>
+            <div>
+              <b>Check your inbox</b>
+              <span id="forgotSentMsg">If that email exists, a reset link has been sent.</span>
+            </div>
+          </div>
+          <div class="auth-note demo" id="demoLinkWrap">
+            <i class="fa-solid fa-flask"></i>
+            <div>
+              <b>Demo mode</b>
+              <span>No mail server is connected, so use this link directly:</span>
+              <a href="#" id="demoResetLink">Open reset link →</a>
+            </div>
+          </div>
+        </div>
+
+        <p class="switch-link"><a href="#" id="backToLoginFromForgot">← Back to sign in</a></p>
+      </section>
+
+      <!-- ---------- RESET PASSWORD VIEW ---------- -->
+      <section id="resetView" class="hidden">
+        <div class="auth-heading">
+          <h2>Choose a new password</h2>
+          <p>Your new password must be different from previously used passwords.</p>
+        </div>
+
+        <form id="resetForm" novalidate>
+          <div class="field">
+            <label for="resetPassword">New Password</label>
+            <div class="input-wrap">
+              <i class="fa-solid fa-lock input-icon"></i>
+              <input class="input" type="password" id="resetPassword" placeholder="Create a new password" required>
+              <button type="button" class="input-toggle" id="toggleResetPw" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
+            </div>
+          </div>
+          <div class="strength-meter" id="resetStrengthMeter">
+            <div class="strength-seg reset-seg"></div><div class="strength-seg reset-seg"></div>
+            <div class="strength-seg reset-seg"></div><div class="strength-seg reset-seg"></div>
+          </div>
+          <div class="strength-label" id="resetStrengthLabel" style="color:var(--text-muted);">Password strength</div>
+
+          <div class="field" style="margin-top:14px;">
+            <label for="resetConfirm">Confirm New Password</label>
+            <div class="input-wrap">
+              <i class="fa-solid fa-lock input-icon"></i>
+              <input class="input" type="password" id="resetConfirm" placeholder="Re-enter new password" required>
+            </div>
+            <div class="field-error hidden" id="resetError">Passwords do not match.</div>
+          </div>
+
+          <button type="submit" class="btn btn-primary btn-block" id="resetSubmitBtn">
+            <span>Reset Password</span> <i class="fa-solid fa-check"></i>
+          </button>
+        </form>
+
+        <p class="switch-link"><a href="#" id="backToLoginFromReset">← Back to sign in</a></p>
+      </section>
+
     </div>
   </main>
 </div>
@@ -327,17 +416,135 @@
 
   const loginView = document.getElementById("loginView");
   const signupView = document.getElementById("signupView");
+  const forgotView = document.getElementById("forgotView");
+  const resetView = document.getElementById("resetView");
+
+  const ALL_VIEWS = [loginView, signupView, forgotView, resetView];
+  function showView(view) {
+    ALL_VIEWS.forEach(v => v.classList.toggle("hidden", v !== view));
+  }
 
   document.getElementById("showSignup").addEventListener("click", (e) => {
     e.preventDefault();
-    loginView.classList.add("hidden");
-    signupView.classList.remove("hidden");
+    showView(signupView);
   });
   document.getElementById("showLogin").addEventListener("click", (e) => {
     e.preventDefault();
-    signupView.classList.add("hidden");
-    loginView.classList.remove("hidden");
+    showView(loginView);
   });
+
+  // ---------------- Forgot / Reset password ----------------
+  document.getElementById("showForgot").addEventListener("click", (e) => {
+    e.preventDefault();
+    document.getElementById("forgotEmail").value = document.getElementById("loginEmail").value.trim();
+    document.getElementById("forgotSent").classList.add("hidden");
+    document.getElementById("forgotForm").classList.remove("hidden");
+    showView(forgotView);
+  });
+  document.getElementById("backToLoginFromForgot").addEventListener("click", (e) => {
+    e.preventDefault(); showView(loginView);
+  });
+  document.getElementById("backToLoginFromReset").addEventListener("click", (e) => {
+    e.preventDefault();
+    history.replaceState(null, "", location.pathname);
+    showView(loginView);
+  });
+
+  document.getElementById("forgotForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = document.getElementById("forgotEmail").value.trim();
+    const err = document.getElementById("forgotEmailError");
+    if (!/^\S+@\S+\.\S+$/.test(email)) { err.classList.remove("hidden"); return; }
+    err.classList.add("hidden");
+
+    const btn = document.getElementById("forgotSubmitBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Sending...`;
+    try {
+      const res = await API.requestPasswordReset(email);
+      document.getElementById("forgotForm").classList.add("hidden");
+      document.getElementById("forgotSent").classList.remove("hidden");
+      document.getElementById("forgotSentMsg").textContent = res.message || "If that email exists, a reset link has been sent.";
+
+      const demoWrap = document.getElementById("demoLinkWrap");
+      if (res.demo_token) {
+        // Mock mode: surface the link so the flow is walkable end to end.
+        demoWrap.classList.remove("hidden");
+        const link = document.getElementById("demoResetLink");
+        link.href = `${location.pathname}?reset_token=${encodeURIComponent(res.demo_token)}`;
+        link.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          history.replaceState(null, "", link.href);
+          openResetView(res.demo_token);
+        }, { once: true });
+      } else {
+        demoWrap.classList.add("hidden");
+      }
+    } catch {
+      // request() already surfaced a toast
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<span>Send Reset Link</span> <i class="fa-solid fa-paper-plane"></i>`;
+    }
+  });
+
+  let activeResetToken = null;
+  function openResetView(token) {
+    activeResetToken = token;
+    document.getElementById("resetPassword").value = "";
+    document.getElementById("resetConfirm").value = "";
+    checkResetPassword("");
+    showView(resetView);
+  }
+
+  const resetSegs = Utils.qsa(".reset-seg");
+  const resetStrengthLabel = document.getElementById("resetStrengthLabel");
+  function checkResetPassword(pw) {
+    const checks = {
+      len: pw.length >= 8,
+      upper: /[A-Z]/.test(pw),
+      num: /[0-9]/.test(pw),
+      special: /[^A-Za-z0-9]/.test(pw),
+    };
+    const score = Object.values(checks).filter(Boolean).length;
+    const colors = ["var(--red)", "var(--red)", "var(--yellow)", "var(--green)", "var(--green)"];
+    const labels = ["Weak", "Weak", "Fair", "Strong", "Very Strong"];
+    resetSegs.forEach((seg, i) => { seg.style.background = i < score ? colors[score] : "var(--bg-input)"; });
+    resetStrengthLabel.textContent = pw ? labels[score] : "Password strength";
+    resetStrengthLabel.style.color = pw ? colors[score] : "var(--text-muted)";
+    return score;
+  }
+  document.getElementById("resetPassword").addEventListener("input", (e) => checkResetPassword(e.target.value));
+
+  document.getElementById("resetForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const pw = document.getElementById("resetPassword").value;
+    const confirm = document.getElementById("resetConfirm").value;
+    const err = document.getElementById("resetError");
+
+    if (checkResetPassword(pw) < 3) { Components.createToast("Please choose a stronger password.", "error"); return; }
+    if (pw !== confirm) { err.classList.remove("hidden"); return; }
+    err.classList.add("hidden");
+
+    const btn = document.getElementById("resetSubmitBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Resetting...`;
+    try {
+      await API.resetPassword(activeResetToken, pw);
+      Components.createToast("Password reset. You can now sign in.", "success");
+      history.replaceState(null, "", location.pathname);
+      showView(loginView);
+    } catch (error) {
+      Components.createToast(error.message || "That reset link is no longer valid.", "error");
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<span>Reset Password</span> <i class="fa-solid fa-check"></i>`;
+    }
+  });
+
+  // Deep-link support: /index.html?reset_token=...
+  const urlToken = new URLSearchParams(location.search).get("reset_token");
+  if (urlToken) openResetView(urlToken);
 
   // Password show/hide toggles
   function bindToggle(btnId, inputId) {
@@ -351,6 +558,51 @@
   }
   bindToggle("toggleLoginPw", "loginPassword");
   bindToggle("toggleSignupPw", "signupPassword");
+  bindToggle("toggleResetPw", "resetPassword");
+
+  // ---------------- Department list ----------------
+  // Built from the single source of truth so every department — including
+  // Workforce & Attendance — is always offered at signup.
+  const departmentSelect = document.getElementById("department");
+  const departmentHint = document.getElementById("departmentHint");
+  document.getElementById("departmentList").innerHTML =
+    MockData.departments.map(d => `<option value="${Utils.escapeHtml(d.name)}">`).join("");
+  // Clients pick from real projects; typed free-text is also accepted.
+  const cpList = document.getElementById("clientProjectList");
+  if (cpList) cpList.innerHTML = MockData.projects.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
+  // Project Managers name the project they run; the same list backs it.
+  const pnList = document.getElementById("projectNameList");
+  if (pnList) pnList.innerHTML = MockData.projects.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
+
+  // Joining Workforce & Attendance carries a specific responsibility, so say so.
+  const projectNameInput = document.getElementById("projectName");
+  const projectNameHint = document.getElementById("projectNameHint");
+  ["input", "change"].forEach(ev => projectNameInput.addEventListener(ev, () => {
+    const typed = projectNameInput.value.trim();
+    const match = MockData.projects.find(p => p.title.toLowerCase() === typed.toLowerCase());
+    if (match) {
+      projectNameHint.innerHTML = `<i class="fa-solid fa-building"></i> Department: <b>${Utils.escapeHtml(match.department || "—")}</b>`;
+      projectNameHint.classList.remove("hidden");
+    } else if (typed) {
+      projectNameHint.innerHTML = `<i class="fa-solid fa-circle-plus"></i> New project — an admin will assign its department later.`;
+      projectNameHint.classList.remove("hidden");
+    } else {
+      projectNameHint.classList.add("hidden");
+    }
+  }));
+
+  ["input", "change"].forEach(ev => departmentSelect.addEventListener(ev, () => {
+    const dept = MockData.getDepartmentByName(departmentSelect.value);
+    if (departmentSelect.value === Roles.WORKFORCE_DEPT) {
+      departmentHint.innerHTML = `<i class="fa-solid fa-clipboard-user"></i> Members of this department are responsible for taking daily attendance for all staff and daily workers.`;
+      departmentHint.classList.remove("hidden");
+    } else if (dept && dept.description) {
+      departmentHint.innerHTML = `<i class="fa-solid fa-circle-info"></i> ${Utils.escapeHtml(dept.description)}`;
+      departmentHint.classList.remove("hidden");
+    } else {
+      departmentHint.classList.add("hidden");
+    }
+  }));
 
   // ---------------- Login ----------------
   const loginForm = document.getElementById("loginForm");
@@ -419,13 +671,17 @@
       if (!company) { Components.createToast("Please enter your company/organization name.", "error"); return false; }
       return true;
     }
-    const orgName = document.getElementById("orgName").value.trim();
-    const orgType = document.getElementById("orgType").value;
-    const department = document.getElementById("department").value;
-    const jobTitle = document.getElementById("jobTitle").value.trim();
-    const experience = document.getElementById("experience").value;
-    if (!orgName || !orgType || !department || !jobTitle || experience === "") {
-      Components.createToast("Please complete all organization details.", "error"); return false;
+    // Validate only what this role was actually asked for.
+    const required = ROLE_REQUIRED[selectedRole] || [];
+    const LABELS = { orgName: "organization name", orgType: "organization type",
+                     department: "department", jobTitle: "job title", experience: "years of experience" };
+    for (const key of required) {
+      const el = document.getElementById(key);
+      if (!el || !String(el.value).trim()) {
+        Components.createToast(`Please enter your ${LABELS[key] || key}.`, "error");
+        el?.focus();
+        return false;
+      }
     }
     return true;
   }
@@ -445,14 +701,79 @@
     clientProjectSelect.appendChild(opt);
   });
 
-  // Role card selection — toggles internal-staff fields vs. client fields
+  // ---------------- Role-aware signup fields ----------------
+  // Only ask for what a role actually needs. Executive roles aren't tied to a
+  // department, auditors don't report a job title, and so on. Anything omitted
+  // is derived on submit (see derivedFieldsFor), so the payload stays complete.
+  const ROLE_FIELDS = {
+    "Super Admin":        { fields: ["orgName", "orgType"],                                  note: "Super Admins sit above the department structure — no department or job title needed." },
+    "General Manager":    { fields: ["orgName", "orgType"],                                  note: "General Managers oversee the whole organization, so no single department applies." },
+    "Department Manager": { fields: ["orgName", "department", "experience"],                 note: "You'll manage the department you choose here. Your job title is set automatically." },
+    "Project Manager":    { fields: ["orgName", "projectName", "experience"],                note: "Project Managers are tied to a project rather than a department — we'll infer the department from the project you name." },
+    "Engineer":           { fields: ["orgName", "department", "jobTitle", "experience"],     note: "" },
+    "Auditor":            { fields: ["orgName", "experience"],                               note: "Auditors work across the whole organization from Compliance — no department needed." },
+    "Client":             { fields: [],                                                      note: "" },
+  };
+  // Required subset per role (everything else on show is optional).
+  const ROLE_REQUIRED = {
+    "Super Admin":        ["orgName"],
+    "General Manager":    ["orgName"],
+    "Department Manager": ["orgName", "department"],
+    "Project Manager":    ["orgName", "projectName"],
+    "Engineer":           ["orgName", "department", "jobTitle"],
+    "Auditor":            ["orgName"],
+    "Client":             [],
+  };
+  // What we fill in for the fields we deliberately never asked about.
+  function derivedFieldsFor(role) {
+    switch (role) {
+      case "Super Admin":        return { department: "Executive",  job_title: "System Administrator" };
+      case "General Manager":    return { department: "Executive",  job_title: "General Manager" };
+      case "Auditor":            return { department: "Compliance", job_title: "Compliance Auditor" };
+      case "Department Manager": return { job_title: null };  // "<Department> Manager", resolved below
+      case "Project Manager":    return { job_title: "Project Manager" };
+      default:                   return {};
+    }
+  }
+
   const internalOrgFields = document.getElementById("internalOrgFields");
   const clientOrgFields = document.getElementById("clientOrgFields");
+  const roleScopeNote = document.getElementById("roleScopeNote");
+
   function applyRoleFieldVisibility(role) {
     const isClient = role === "Client";
     internalOrgFields.classList.toggle("hidden", isClient);
     clientOrgFields.classList.toggle("hidden", !isClient);
+    if (isClient) return;
+
+    const cfg = ROLE_FIELDS[role] || ROLE_FIELDS["Engineer"];
+    const required = ROLE_REQUIRED[role] || [];
+    Utils.qsa("[data-field]", internalOrgFields).forEach(wrap => {
+      const key = wrap.dataset.field;
+      const show = cfg.fields.includes(key);
+      wrap.classList.toggle("hidden", !show);
+      const input = wrap.querySelector("input");
+      if (input) {
+        // Clear hidden inputs so a stale value can't leak into the payload.
+        if (!show) input.value = "";
+        input.required = show && required.includes(key);
+      }
+      // Mark required fields visually
+      const label = wrap.querySelector("label");
+      if (label) {
+        label.querySelector(".req")?.remove();
+        if (show && required.includes(key)) {
+          label.insertAdjacentHTML("beforeend", ' <span class="req">*</span>');
+        }
+      }
+    });
+
+    roleScopeNote.innerHTML = cfg.note
+      ? `<i class="fa-solid fa-circle-info"></i> ${Utils.escapeHtml(cfg.note)}`
+      : "";
+    roleScopeNote.classList.toggle("hidden", !cfg.note);
   }
+
   Utils.qsa(".role-card").forEach(card => card.addEventListener("click", () => {
     Utils.qsa(".role-card").forEach(c => c.classList.remove("selected"));
     card.classList.add("selected");
@@ -512,16 +833,37 @@
     if (!terms) { Components.createToast("Please accept the Terms of Service.", "error"); return; }
 
     const isClientRole = selectedRole === "Client";
+    const derived = derivedFieldsFor(selectedRole);
+    let typedDept = document.getElementById("department").value.trim();
+    const typedTitle = document.getElementById("jobTitle").value.trim();
+    const typedProject = document.getElementById("projectName").value.trim();
+
+    // A Project Manager names a project, not a department — infer the
+    // department from it when the project is one we already know about.
+    if (selectedRole === "Project Manager" && typedProject) {
+      const match = MockData.projects.find(p => p.title.toLowerCase() === typedProject.toLowerCase());
+      if (match && match.department) typedDept = match.department;
+    }
+
+    // A Department Manager's title follows the department they picked.
+    const resolvedTitle = isClientRole ? "Client"
+      : (typedTitle
+         || (selectedRole === "Department Manager" && typedDept ? `${typedDept} Manager` : null)
+         || derived.job_title
+         || selectedRole);
+
     const payload = {
       full_name: document.getElementById("fullName").value.trim(),
       email: document.getElementById("signupEmail").value.trim(),
       phone: document.getElementById("phone").value.trim(),
       organization_name: isClientRole ? document.getElementById("clientCompany").value.trim() : document.getElementById("orgName").value.trim(),
-      organization_type: isClientRole ? "Client" : document.getElementById("orgType").value,
-      department: isClientRole ? null : document.getElementById("department").value,
-      job_title: isClientRole ? "Client" : document.getElementById("jobTitle").value.trim(),
-      experience_years: isClientRole ? null : Number(document.getElementById("experience").value),
-      linked_project: isClientRole ? document.getElementById("clientProject").value : null,
+      organization_type: isClientRole ? "Client" : (document.getElementById("orgType").value.trim() || "General Contractor"),
+      department: isClientRole ? null : (typedDept || derived.department || null),
+      job_title: resolvedTitle,
+      experience_years: isClientRole ? null : (Number(document.getElementById("experience").value) || 0),
+      linked_project: isClientRole
+        ? document.getElementById("clientProject").value
+        : (selectedRole === "Project Manager" ? typedProject : null),
       role: selectedRole,
       password,
     };

@@ -104,6 +104,38 @@ const MockData = (() => {
     });
   });
 
+  // Some people genuinely wear two hats. The Site Operations manager also runs
+  // projects directly, so they hold both roles and can switch between them.
+  // `role_contexts` lets each hat carry its own department scope.
+  const dualRoleMgr = members.find(m => m.id === "mem_dm_1");
+  if (dualRoleMgr) {
+    dualRoleMgr.roles = ["Department Manager", "Project Manager"];
+    dualRoleMgr.role_contexts = {
+      "Department Manager": { department: dualRoleMgr.department, job_title: `${dualRoleMgr.department} Manager` },
+      "Project Manager":    { department: dualRoleMgr.department, job_title: "Project Manager" },
+    };
+  }
+
+  // ---- Dedicated Project Managers (one per major delivery department) ----
+  const pmSeed = [
+    { id: "mem_pm_1", name: "Bruk Haile",      dept: "Site Operations" },
+    { id: "mem_pm_2", name: "Saba Tesfaye",    dept: "Engineering & Design" },
+    { id: "mem_pm_3", name: "Henok Girma",     dept: "Site Operations" },
+    { id: "mem_pm_4", name: "Marta Wolde",     dept: "Quality Control" },
+  ];
+  pmSeed.forEach((pm, i) => {
+    members.push({
+      id: pm.id, full_name: pm.name, role: "Project Manager", department: pm.dept,
+      job_title: "Project Manager", experience_years: randInt(7, 16),
+      skills: ["Project Scheduling", "Cost Estimation", "Site Supervision", ...pickSkills()].slice(0, 4),
+      status: "Active", projects_count: randInt(1, 3), on_time_pct: randInt(78, 96),
+      phone: `+25191100${30 + i}`,
+      joined: new Date(Date.now() - randInt(300, 900) * 86400000).toISOString(),
+      avatar_color: Utils.colorFromString(pm.name),
+      email: i === 0 ? "pm@buildiq.et" : `${pm.name.toLowerCase().replace(/\s+/g, '.')}@buildiq.et`,
+    });
+  });
+
   members.push({ id: "mem_5", full_name: "Nardos Fikru", role: "Auditor", department: "Compliance",
     job_title: "Compliance Auditor", experience_years: 9, skills: ["Risk Assessment","Compliance","Forensic Review"],
     status: "Active", projects_count: 0, on_time_pct: 98, phone: "+251911000005",
@@ -171,14 +203,32 @@ const MockData = (() => {
     const expected = Math.min(100, progress + randInt(-15, 20));
     const risk = progress < expected - 15 ? "HIGH" : progress < expected - 5 ? "MEDIUM" : "LOW";
     const dept = randOf(departments.filter(d => d.name !== "Human Resources" && d.name !== "Client Relations"));
-    const team = Array.from({length: randInt(3,7)}, () => randOf(engineers));
+    // De-duplicate the team so the same engineer isn't listed twice
+    const team = [...new Map(
+      Array.from({ length: randInt(3, 7) }, () => randOf(engineers)).map(m => [m.id, m])
+    ).values()];
     const client = clients[i % clients.length];
+
+    // Every project has exactly one accountable manager. Prefer a dedicated
+    // Project Manager from the owning department, then that department's
+    // manager, then the most senior engineer on the team.
+    const dedicatedPMs = members.filter(m => m.role === "Project Manager" && m.department === dept.name);
+    const deptManager = members.find(m => m.role === "Department Manager" && m.department === dept.name);
+    const seniorOnTeam = [...team].sort((a, b) => (b.experience_years || 0) - (a.experience_years || 0))[0];
+    const manager = (dedicatedPMs.length ? dedicatedPMs[i % dedicatedPMs.length] : null)
+      || deptManager || seniorOnTeam || engineers[0];
+    // The manager is always part of the project team.
+    if (manager && !team.some(m => m.id === manager.id)) team.unshift(manager);
+
     projects.push({
       id: `proj_${i+1}`,
       title: projectNames[i],
       type: randOf(projectTypes),
       region: randOf(regions),
       department: dept.name,
+      manager_id: manager ? manager.id : null,
+      manager_name: manager ? manager.full_name : null,
+      manager_role: manager ? manager.role : null,
       client_id: client.id,
       client_name: client.company,
       status: progress >= 100 ? "Completed" : progress > 0 ? "In Progress" : "Planning",
@@ -200,6 +250,153 @@ const MockData = (() => {
   projects[0].client_name = clients[0].company;
   if (!projects[0].team.some(m => m.id === "mem_6")) projects[0].team.unshift(members.find(m => m.id === "mem_6"));
   projects[0].department = "Site Operations";
+
+  // Guarantee the demo Project Manager (mem_pm_1) runs a couple of projects so
+  // signing in with that role always lands on a populated dashboard.
+  const demoPM = members.find(m => m.id === "mem_pm_1");
+  if (demoPM) {
+    [projects[0], projects[2]].filter(Boolean).forEach(p => {
+      p.manager_id = demoPM.id;
+      p.manager_name = demoPM.full_name;
+      p.manager_role = demoPM.role;
+      if (!p.team.some(m => m.id === demoPM.id)) p.team.unshift(demoPM);
+    });
+  }
+
+  // ---------------- Inline creation (used by the New Project form) ----------------
+  function createDepartment({ name, head_id, description, scope, budget }) {
+    const clean = String(name || "").trim();
+    if (!clean) return { ok: false, error: "Department name is required." };
+    if (departments.some(d => d.name.toLowerCase() === clean.toLowerCase())) {
+      return { ok: false, error: "A department with that name already exists." };
+    }
+    const head = head_id ? members.find(m => m.id === head_id) : null;
+    const dept = {
+      id: `dep_${departments.length + 1}_${Math.random().toString(36).slice(2, 6)}`,
+      name: clean,
+      head: head ? head.full_name : "Unassigned",
+      head_id: head ? head.id : null,
+      description: description || `${clean} department.`,
+      scope: Array.isArray(scope) ? scope : String(scope || "").split(",").map(s => s.trim()).filter(Boolean),
+      budget: Number(budget) || 0,
+      members: 0,
+      projects: 0,
+    };
+    departments.push(dept);
+    // Moving the chosen head into the department they now lead.
+    if (head) { head.department = clean; dept.members = 1; }
+    return { ok: true, department: dept };
+  }
+
+  function createMember({ full_name, email, role, department, job_title, experience_years, phone, skills }) {
+    const name = String(full_name || "").trim();
+    if (!name) return { ok: false, error: "Full name is required." };
+    const mail = String(email || "").trim().toLowerCase()
+      || `${name.toLowerCase().replace(/\s+/g, ".")}@buildiq.et`;
+    if (members.some(m => m.email.toLowerCase() === mail)) {
+      return { ok: false, error: "Someone with that email already exists." };
+    }
+    const member = {
+      id: `mem_${Math.random().toString(36).slice(2, 10)}`,
+      full_name: name,
+      email: mail,
+      role: role || "Engineer",
+      department: department || null,
+      job_title: job_title || (role === "Project Manager" ? "Project Manager" : "Site Engineer"),
+      experience_years: Number(experience_years) || 0,
+      skills: Array.isArray(skills) ? skills : String(skills || "").split(",").map(s => s.trim()).filter(Boolean),
+      status: "Active",
+      projects_count: 0,
+      on_time_pct: 90,
+      phone: phone || "",
+      joined: new Date().toISOString(),
+      avatar_color: Utils.colorFromString(name),
+    };
+    members.push(member);
+    departments.forEach(d => { d.members = members.filter(m => m.department === d.name).length; });
+    return { ok: true, member };
+  }
+
+  function createClient({ company, contact_name, email, phone }) {
+    const name = String(company || "").trim();
+    if (!name) return { ok: false, error: "Company name is required." };
+    const existing = clients.find(c => c.company.toLowerCase() === name.toLowerCase());
+    if (existing) return { ok: true, client: existing, existed: true }; // reuse rather than duplicate
+    const client = {
+      id: `client_${Math.random().toString(36).slice(2, 10)}`,
+      company: name,
+      contact_name: contact_name || name,
+      email: email || `${name.toLowerCase().replace(/[^a-z0-9]+/g, "")}@example.com`,
+      phone: phone || "",
+      avatar_color: Utils.colorFromString(name),
+    };
+    clients.push(client);
+    return { ok: true, client };
+  }
+
+  // Make sure the dual-role manager actually runs a project, so their
+  // "Project Manager" hat has something to show.
+  (function ensureDualRoleHasProject() {
+    const dual = members.find(m => Array.isArray(m.roles) && m.roles.includes("Project Manager") && m.role === "Department Manager");
+    if (!dual) return;
+    if (projects.some(p => p.manager_id === dual.id)) return;
+    const target = projects.find(p => p.department === dual.department) || projects[projects.length - 1];
+    if (!target) return;
+    target.manager_id = dual.id;
+    target.manager_name = dual.full_name;
+    target.manager_role = "Project Manager";
+    if (!target.team.some(m => m.id === dual.id)) target.team.unshift(dual);
+  })();
+
+  function getProjectsManagedBy(memberId) {
+    return projects.filter(p => p.manager_id === memberId);
+  }
+
+  // Reassigning a project's manager. Keeps the new manager on the team.
+  function setProjectManager(projectId, memberId) {
+    const project = projects.find(p => p.id === projectId);
+    const member = members.find(m => m.id === memberId);
+    if (!project) return { ok: false, error: "Project not found." };
+    if (!member) return { ok: false, error: "That person is not a member of the organization." };
+    if (member.status !== "Active") return { ok: false, error: "That member is not active." };
+
+    project.manager_id = member.id;
+    project.manager_name = member.full_name;
+    project.manager_role = member.role;
+    if (!project.team.some(m => m.id === member.id)) project.team.unshift(member);
+    return { ok: true, project };
+  }
+
+  // Appointing the head of a department.
+  function setDepartmentHead(departmentName, memberId) {
+    const dept = departments.find(d => d.name === departmentName);
+    const member = members.find(m => m.id === memberId);
+    if (!dept) return { ok: false, error: "Department not found." };
+    if (!member) return { ok: false, error: "Member not found." };
+    if (member.department !== departmentName) {
+      return { ok: false, error: "The head must already belong to that department." };
+    }
+    dept.head = member.full_name;
+    dept.head_id = member.id;
+    return { ok: true, department: dept };
+  }
+
+  // Moving an engineer into a department (or reassigning them).
+  function assignMemberToDepartment(memberId, departmentName) {
+    const member = members.find(m => m.id === memberId);
+    const dept = departments.find(d => d.name === departmentName);
+    if (!member) return { ok: false, error: "Member not found." };
+    if (!dept) return { ok: false, error: "Department not found." };
+    if (member.role === "Client") return { ok: false, error: "Clients do not belong to a department." };
+
+    const previous = member.department;
+    member.department = departmentName;
+    // Keep department head-counts honest after the move.
+    departments.forEach(d => {
+      d.members = members.filter(m => m.department === d.name).length;
+    });
+    return { ok: true, member, previous };
+  }
 
   projects.forEach(p => {
     p.spent = Math.round(p.budget * (p.progress/100) * (0.9 + Math.random()*0.3));
@@ -350,6 +547,14 @@ const MockData = (() => {
         status, // Present | Absent
         check_in: status === "Absent" ? null : `0${randInt(6,8)}:${randInt(0,59)}`.slice(0,5),
         recorded_by: "Workforce & Attendance",
+        // Absence reason workflow — filled in by the absent person themselves
+        reason: null,              // free-text explanation
+        reason_category: null,     // Sick Leave | Family Emergency | ...
+        reason_submitted_at: null,
+        reason_status: status === "Absent" ? "Not Submitted" : null, // Not Submitted | Pending | Accepted | Rejected
+        reason_reviewed_by: null,
+        reason_reviewed_at: null,
+        reason_review_note: null,
       });
     }
   }
@@ -359,6 +564,77 @@ const MockData = (() => {
   // A handful of workers get a deliberately elevated absence bias so the AI ranking has
   // clear, believable standouts rather than uniform noise.
   dailyWorkers.forEach((w, i) => generateAttendanceFor(w, "daily_worker", i < 5 ? 0.32 : 0.09));
+
+  // ---------------- Absence reason workflow ----------------
+  const ABSENCE_REASON_CATEGORIES = [
+    "Sick Leave", "Family Emergency", "Medical Appointment", "Transport Problem",
+    "Bereavement", "Approved Leave", "Personal Matter", "Other",
+  ];
+
+  const SAMPLE_REASONS = {
+    "Sick Leave": "Came down with a fever overnight and was advised to rest for the day.",
+    "Family Emergency": "Had to attend to an urgent family matter at home.",
+    "Medical Appointment": "Scheduled hospital appointment that could not be moved.",
+    "Transport Problem": "No transport available from my area due to a road closure.",
+    "Bereavement": "Attending a funeral for a close family member.",
+    "Approved Leave": "Annual leave previously agreed with my supervisor.",
+    "Personal Matter": "Unavoidable personal commitment; informed the site lead in advance.",
+    "Other": "Unable to reach the site today; details shared with the supervisor.",
+  };
+
+  // Pre-fill roughly 60% of past absences with a submitted reason so the review
+  // queue and the manager-facing "Reasons" tab have believable content.
+  const REVIEW_OUTCOMES = ["Pending", "Pending", "Accepted", "Accepted", "Accepted", "Rejected"];
+  attendance.filter(a => a.status === "Absent").forEach(a => {
+    if (Math.random() > 0.6) return; // the rest stay "Not Submitted"
+    const category = randOf(ABSENCE_REASON_CATEGORIES);
+    const outcome = randOf(REVIEW_OUTCOMES);
+    a.reason_category = category;
+    a.reason = SAMPLE_REASONS[category];
+    a.reason_submitted_at = new Date(new Date(a.date).getTime() + randInt(2, 30) * 3600000).toISOString();
+    a.reason_status = outcome;
+    if (outcome !== "Pending") {
+      const reviewer = members.find(m => m.role === "Department Manager" && m.department === a.department)
+        || members.find(m => m.id === "mem_dm_9") || members[0];
+      a.reason_reviewed_by = reviewer.full_name;
+      a.reason_reviewed_at = new Date(new Date(a.reason_submitted_at).getTime() + randInt(2, 48) * 3600000).toISOString();
+      a.reason_review_note = outcome === "Accepted"
+        ? "Reason accepted — absence recorded as excused."
+        : "Insufficient notice given; absence recorded as unexcused.";
+    }
+  });
+
+  function submitAbsenceReason(personId, date, { reason, reason_category }) {
+    const record = attendance.find(a => a.person_id === personId && a.date === date);
+    if (!record) return { ok: false, error: "No attendance record for that day." };
+    if (record.status !== "Absent") return { ok: false, error: "You can only explain a day marked Absent." };
+    if (record.reason_status === "Accepted") return { ok: false, error: "This reason was already accepted and is locked." };
+
+    record.reason = reason;
+    record.reason_category = reason_category || "Other";
+    record.reason_submitted_at = new Date().toISOString();
+    record.reason_status = "Pending";
+    // Re-submitting after a rejection clears the previous review.
+    record.reason_reviewed_by = null;
+    record.reason_reviewed_at = null;
+    record.reason_review_note = null;
+    return { ok: true, record };
+  }
+
+  function reviewAbsenceReason(personId, date, { decision, note, reviewer }) {
+    const record = attendance.find(a => a.person_id === personId && a.date === date);
+    if (!record) return { ok: false, error: "No attendance record for that day." };
+    if (!record.reason) return { ok: false, error: "No reason has been submitted for that day." };
+    if (!["Accepted", "Rejected"].includes(decision)) return { ok: false, error: "Invalid decision." };
+
+    record.reason_status = decision;
+    record.reason_reviewed_by = reviewer?.name || reviewer?.full_name || "Unknown";
+    record.reason_reviewed_at = new Date().toISOString();
+    record.reason_review_note = note || (decision === "Accepted"
+      ? "Reason accepted — absence recorded as excused."
+      : "Reason rejected — absence recorded as unexcused.");
+    return { ok: true, record };
+  }
 
   // ---------------- Complaints ----------------
   const complaintCategories = ["Material Quality","Payment Delay","Safety Violation","Project Delay",
@@ -422,32 +698,425 @@ const MockData = (() => {
     resolution_note: "",
   });
 
+  // ---------------- Audit taxonomy (7 audit types) ----------------
+  // Every audit event is classified into exactly one of seven audit types.
+  // Each type declares the signals it watches for and the ML technique the
+  // AI layer applies to it, so the Audit Intelligence page can explain
+  // *why* something was flagged and *how* it was analyzed.
+  const AUDIT_TYPES = {
+    SECURITY: {
+      key: "SECURITY", label: "Security Audit", icon: "fa-lock", color: "red",
+      purpose: "Monitors who accesses the system and how",
+      ml_role: "Anomaly detection",
+      signals: [
+        "Failed login attempts",
+        "Logins at unusual hours",
+        "Multiple IP address changes",
+        "Unauthorized module access",
+      ],
+      actions: ["LOGIN", "LOGIN_FAILED", "LOGOUT", "IP_CHANGE", "UNAUTHORIZED_ACCESS", "PERMISSION_CHANGE"],
+    },
+    FINANCIAL: {
+      key: "FINANCIAL", label: "Financial Audit", icon: "fa-coins", color: "yellow",
+      purpose: "Tracks all money-related actions",
+      ml_role: "Outlier scoring",
+      signals: [
+        "Payment approvals",
+        "Budget modifications",
+        "Invoice creation/deletion",
+        "Expense claims above threshold",
+      ],
+      actions: ["PAYMENT_APPROVAL", "BUDGET_MODIFY", "INVOICE_CREATE", "INVOICE_DELETE", "EXPENSE_CLAIM"],
+    },
+    COMPLIANCE: {
+      key: "COMPLIANCE", label: "Compliance Audit", icon: "fa-clipboard-check", color: "blue",
+      purpose: "Ensures users follow company rules",
+      ml_role: "Rule violation scoring",
+      signals: [
+        "Proper approval chains followed?",
+        "Documents submitted on time?",
+        "Required fields filled correctly?",
+        "Policy violations flagged",
+      ],
+      actions: ["APPROVAL_BYPASS", "LATE_SUBMISSION", "INCOMPLETE_RECORD", "POLICY_VIOLATION"],
+    },
+    USER_ACTIVITY: {
+      key: "USER_ACTIVITY", label: "User Activity Audit", icon: "fa-user-clock", color: "purple",
+      purpose: "Tracks what every user does",
+      ml_role: "Pattern detection",
+      signals: [
+        "Actions per session",
+        "Bulk operations (mass delete/edit)",
+        "Role misuse (doing things outside their role)",
+        "Inactive accounts still accessing system",
+      ],
+      actions: ["BULK_DELETE", "BULK_EDIT", "ROLE_MISUSE", "DORMANT_ACCESS", "VIEW_SENSITIVE"],
+    },
+    DATA_INTEGRITY: {
+      key: "DATA_INTEGRITY", label: "Data Integrity Audit", icon: "fa-database", color: "accent",
+      purpose: "Detects unauthorized data changes",
+      ml_role: "Change anomaly detection",
+      signals: [
+        "Record edits without approval",
+        "Deleted records",
+        "Duplicate entries",
+        "Data imported from outside sources",
+      ],
+      actions: ["UPDATE_RECORD", "UNAPPROVED_EDIT", "RECORD_DELETE", "DUPLICATE_ENTRY", "EXTERNAL_IMPORT"],
+    },
+    PROJECT_RESOURCE: {
+      key: "PROJECT_RESOURCE", label: "Project & Resource Audit", icon: "fa-helmet-safety", color: "cyan",
+      purpose: "Construction-specific resource and delivery oversight",
+      ml_role: "Predictive analytics",
+      signals: [
+        "Material usage vs budget",
+        "Equipment assigned vs returned",
+        "Project milestone delays",
+        "Contractor performance tracking",
+      ],
+      actions: ["MATERIAL_OVERUSE", "EQUIPMENT_CHECKOUT", "EQUIPMENT_UNRETURNED", "MILESTONE_DELAY", "CONTRACTOR_REVIEW"],
+    },
+    REPORT_DOCUMENT: {
+      key: "REPORT_DOCUMENT", label: "Report & Document Audit", icon: "fa-file-shield", color: "green",
+      purpose: "Tracks report generation and document access activity",
+      ml_role: "Access pattern analysis",
+      signals: [
+        "Who generated what report",
+        "Reports downloaded or shared externally",
+        "Modified reports after approval",
+        "Frequency of report generation",
+      ],
+      actions: ["REPORT_GENERATE", "EXPORT_DATA", "EXTERNAL_SHARE", "POST_APPROVAL_EDIT", "FILE_UPLOAD", "DELETE_DOCUMENT"],
+    },
+  };
+
+  const AUDIT_TYPE_LIST = Object.values(AUDIT_TYPES);
+
+  // Reverse index: action -> audit type key
+  const ACTION_TO_TYPE = {};
+  AUDIT_TYPE_LIST.forEach(t => t.actions.forEach(a => { ACTION_TO_TYPE[a] = t.key; }));
+
+  function auditTypeForAction(action) {
+    return ACTION_TO_TYPE[action] || "USER_ACTIVITY";
+  }
+  function auditTypeMeta(key) {
+    return AUDIT_TYPES[key] || AUDIT_TYPES.USER_ACTIVITY;
+  }
+
+  // Human-readable label for each raw action code
+  const ACTION_LABELS = {
+    LOGIN: "Login", LOGIN_FAILED: "Failed login", LOGOUT: "Logout",
+    IP_CHANGE: "IP address change", UNAUTHORIZED_ACCESS: "Unauthorized module access",
+    PERMISSION_CHANGE: "Permission change",
+    PAYMENT_APPROVAL: "Payment approval", BUDGET_MODIFY: "Budget modification",
+    INVOICE_CREATE: "Invoice created", INVOICE_DELETE: "Invoice deleted",
+    EXPENSE_CLAIM: "Expense claim",
+    APPROVAL_BYPASS: "Approval chain bypassed", LATE_SUBMISSION: "Late document submission",
+    INCOMPLETE_RECORD: "Incomplete required fields", POLICY_VIOLATION: "Policy violation",
+    BULK_DELETE: "Bulk delete", BULK_EDIT: "Bulk edit", ROLE_MISUSE: "Role misuse",
+    DORMANT_ACCESS: "Dormant account access", VIEW_SENSITIVE: "Viewed sensitive data",
+    UPDATE_RECORD: "Record updated", UNAPPROVED_EDIT: "Edit without approval",
+    RECORD_DELETE: "Record deleted", DUPLICATE_ENTRY: "Duplicate entry",
+    EXTERNAL_IMPORT: "External data import",
+    MATERIAL_OVERUSE: "Material usage over budget", EQUIPMENT_CHECKOUT: "Equipment checked out",
+    EQUIPMENT_UNRETURNED: "Equipment not returned", MILESTONE_DELAY: "Milestone delay",
+    CONTRACTOR_REVIEW: "Contractor performance review",
+    REPORT_GENERATE: "Report generated", EXPORT_DATA: "Data export",
+    EXTERNAL_SHARE: "Shared externally", POST_APPROVAL_EDIT: "Report edited after approval",
+    FILE_UPLOAD: "File upload", DELETE_DOCUMENT: "Document deleted",
+  };
+  function actionLabel(action) {
+    return ACTION_LABELS[action] || String(action).replace(/_/g, " ").toLowerCase();
+  }
+
   // ---------------- Audit logs ----------------
-  const auditActions = ["LOGIN","EXPORT_DATA","BULK_DELETE","UPDATE_RECORD","VIEW_SENSITIVE","PERMISSION_CHANGE","FILE_UPLOAD","LOGOUT"];
+  const auditActions = AUDIT_TYPE_LIST.flatMap(t => t.actions);
   const auditLogs = [];
   const internalMembers = members.filter(m => m.role !== "Client");
-  for (let i = 0; i < 60; i++) {
+
+  // Resources are drawn per audit type so each event reads plausibly
+  const RESOURCES_BY_TYPE = {
+    SECURITY: ["auth/login", "auth/session", "settings/permissions", "admin/console", "api/tokens"],
+    FINANCIAL: ["finance/invoices", "finance/payments", "projects/budget", "finance/expense-claims", "finance/payroll"],
+    COMPLIANCE: ["compliance/approvals", "documents/permits", "compliance/checklists", "contracts/addendum"],
+    USER_ACTIVITY: ["members table", "complaints DB", "tasks/bulk", "users/roles", "attendance records"],
+    DATA_INTEGRITY: ["projects/proj_12", "members table", "materials ledger", "attendance records", "imports/external"],
+    PROJECT_RESOURCE: ["projects/proj_3/materials", "equipment/registry", "projects/milestones", "contractors/performance"],
+    REPORT_DOCUMENT: ["reports/export", "documents/Structural_Drawings_v3.pdf", "reports/attendance", "documents/shared-link"],
+  };
+
+  // Highest-risk actions per type — these drive the anomaly score upward
+  const HIGH_RISK_ACTIONS = new Set([
+    "LOGIN_FAILED", "UNAUTHORIZED_ACCESS", "PERMISSION_CHANGE", "IP_CHANGE",
+    "INVOICE_DELETE", "BUDGET_MODIFY",
+    "APPROVAL_BYPASS", "POLICY_VIOLATION",
+    "BULK_DELETE", "ROLE_MISUSE", "DORMANT_ACCESS",
+    "UNAPPROVED_EDIT", "RECORD_DELETE", "EXTERNAL_IMPORT",
+    "MATERIAL_OVERUSE", "EQUIPMENT_UNRETURNED",
+    "EXTERNAL_SHARE", "POST_APPROVAL_EDIT", "EXPORT_DATA",
+  ]);
+
+  // Type-specific narrative for why the AI flagged this event
+  function explainAuditEvent(type, actorName, action, score) {
+    if (score <= 0.5) return "Access pattern consistent with role and history.";
+    const label = actionLabel(action).toLowerCase();
+    const by = {
+      SECURITY: `Anomaly detection flagged ${actorName}: ${label} deviates from their established access baseline (device, hour, and location profile).`,
+      FINANCIAL: `Outlier scoring flagged ${actorName}: this ${label} sits well outside the normal value distribution for their approval history.`,
+      COMPLIANCE: `Rule violation scoring flagged ${actorName}: ${label} breaks a required approval or submission rule for this record type.`,
+      USER_ACTIVITY: `Pattern detection flagged ${actorName}: ${label} is inconsistent with the volume and scope this role normally performs.`,
+      DATA_INTEGRITY: `Change anomaly detection flagged ${actorName}: ${label} altered records without the expected approval trail.`,
+      PROJECT_RESOURCE: `Predictive analytics flagged ${actorName}: ${label} projects a budget or schedule overrun against the plan baseline.`,
+      REPORT_DOCUMENT: `Access pattern analysis flagged ${actorName}: ${label} is an unusual distribution pattern for reports of this sensitivity.`,
+    };
+    return by[type] || by.USER_ACTIVITY;
+  }
+
+  for (let i = 0; i < 84; i++) {
     const user = randOf(internalMembers);
-    const action = randOf(auditActions);
+    // Spread events evenly across all seven types so every tab has content
+    const type = AUDIT_TYPE_LIST[i % AUDIT_TYPE_LIST.length];
+    const action = randOf(type.actions);
     const hour = randInt(0, 23);
     const isOdd = hour < 6 || hour > 22;
-    const riskBase = (action === "BULK_DELETE" || action === "EXPORT_DATA" ? 0.45 : 0.1) + (isOdd ? 0.3 : 0) + Math.random()*0.3;
+    const riskBase = (HIGH_RISK_ACTIONS.has(action) ? 0.45 : 0.1) + (isOdd ? 0.3 : 0) + Math.random() * 0.3;
     const score = Math.min(0.99, riskBase);
     const risk_level = score > 0.85 ? "CRITICAL" : score > 0.65 ? "HIGH" : score > 0.45 ? "MEDIUM" : "LOW";
     auditLogs.push({
-      id: `log_${i+1}`,
+      id: `log_${i + 1}`,
       user: user.full_name,
       user_role: user.role,
       action,
-      resource: randOf(["members table","projects/proj_12","complaints DB","audit_logs","reports/export","settings"]),
-      timestamp: new Date(Date.now() - randInt(0, 14)*86400000 - hour*3600000).toISOString(),
+      action_label: actionLabel(action),
+      audit_type: type.key,
+      ml_role: type.ml_role,
+      resource: randOf(RESOURCES_BY_TYPE[type.key]),
+      timestamp: new Date(Date.now() - randInt(0, 14) * 86400000 - hour * 3600000).toISOString(),
       anomaly_score: Number(score.toFixed(4)),
       risk_level,
       is_flagged: score > 0.5,
-      context: isOdd ? `${['Sat','Sun'][randInt(0,1)]} ${hour}:${randInt(10,59)} ${hour<12?'AM':'PM'} — outside working hours` : "Normal business hours",
-      explanation: score > 0.5 ? `${user.full_name} performed ${action} on ${randOf(['a weekend','a holiday','an unusual hour'])}, which deviates from their typical access pattern.` : "Access pattern consistent with role and history.",
-      review_status: score > 0.5 ? randOf(["Under Review","Under Review","Confirmed Threat","False Alarm"]) : "Cleared",
+      context: isOdd
+        ? `${['Sat', 'Sun'][randInt(0, 1)]} ${hour}:${randInt(10, 59)} ${hour < 12 ? 'AM' : 'PM'} — outside working hours`
+        : "Normal business hours",
+      explanation: explainAuditEvent(type.key, user.full_name, action, score),
+      review_status: score > 0.5 ? randOf(["Under Review", "Under Review", "Confirmed Threat", "False Alarm"]) : "Cleared",
     });
+  }
+
+  // ---------------- Live audit trail ----------------
+  // Called from every meaningful management action across the app so the Audit
+  // Intelligence page reflects real activity, not just the seeded rows above.
+  let auditSeq = auditLogs.length;
+  function logAuditEvent(actor, action, resource, meta = {}) {
+    const hour = new Date().getHours();
+    const isOdd = hour < 6 || hour > 22;
+    // Classify the live event into one of the seven audit types
+    const typeKey = meta.audit_type || auditTypeForAction(action);
+    const type = auditTypeMeta(typeKey);
+    const base = (HIGH_RISK_ACTIONS.has(action) ? 0.45 : 0.08) + (isOdd ? 0.28 : 0);
+    const score = Math.min(0.99, Number((base + Math.random() * 0.18).toFixed(4)));
+    const actorName = actor?.name || actor?.full_name || "System";
+    const entry = {
+      id: `log_${++auditSeq}`,
+      user: actorName,
+      user_role: actor?.role || "System",
+      action,
+      action_label: actionLabel(action),
+      audit_type: type.key,
+      ml_role: type.ml_role,
+      resource,
+      timestamp: new Date().toISOString(),
+      anomaly_score: score,
+      risk_level: score > 0.85 ? "CRITICAL" : score > 0.65 ? "HIGH" : score > 0.45 ? "MEDIUM" : "LOW",
+      is_flagged: score > 0.5,
+      context: isOdd ? `Performed at ${String(hour).padStart(2, "0")}:00 — outside working hours` : "Normal business hours",
+      explanation: explainAuditEvent(type.key, actorName, action, score),
+      review_status: score > 0.5 ? "Under Review" : "Cleared",
+      ...meta,
+    };
+    auditLogs.unshift(entry);
+    return entry;
+  }
+
+  // ---------------- Notifications ----------------
+  // Each notification targets some combination of explicit user ids, roles, and
+  // departments. `read_by` holds the ids of users who have read it, so read-state
+  // is per-user rather than global.
+  let notificationSeq = 0;
+  const notifications = [];
+
+  function addNotification({ title, body, icon = "fa-bell", type = "info", link = null, target = {} }) {
+    const n = {
+      id: `ntf_${++notificationSeq}`,
+      title, body, icon, type, link,
+      target: { user_ids: target.user_ids || [], roles: target.roles || [], departments: target.departments || [] },
+      created_at: new Date().toISOString(),
+      read_by: [],
+    };
+    notifications.unshift(n);
+    return n;
+  }
+
+  function notificationsFor(user) {
+    if (!user) return [];
+    return notifications.filter(n => {
+      const t = n.target;
+      if (t.user_ids.includes(user.id)) return true;
+      if (t.departments.length && user.department && t.departments.includes(user.department)) return true;
+      if (t.roles.length && t.roles.includes(user.role)) return true;
+      return false;
+    });
+  }
+
+  function unreadCountFor(user) {
+    if (!user) return 0;
+    return notificationsFor(user).filter(n => !n.read_by.includes(user.id)).length;
+  }
+
+  function markNotificationRead(user, id) {
+    const n = notifications.find(x => x.id === id);
+    if (n && user && !n.read_by.includes(user.id)) n.read_by.push(user.id);
+    return n;
+  }
+
+  function markAllNotificationsRead(user) {
+    notificationsFor(user).forEach(n => { if (!n.read_by.includes(user.id)) n.read_by.push(user.id); });
+    return notificationsFor(user);
+  }
+
+  // Seed a believable inbox for every role
+  (function seedNotifications() {
+    const openComplaint = complaints.find(c => c.status !== "resolved") || complaints[0];
+    const riskyProject = projects.find(p => p.delay_risk === "HIGH") || projects[0];
+    const flagged = auditLogs.find(l => l.is_flagged);
+    const workforceMgr = members.find(m => m.role === "Department Manager" && m.department === "Workforce & Attendance");
+
+    addNotification({
+      title: "New complaint awaiting triage",
+      body: `${openComplaint.id} — ${openComplaint.category} on ${openComplaint.project}.`,
+      icon: "fa-triangle-exclamation", type: "warning", link: "complaints.html",
+      target: { roles: ["Super Admin", "General Manager"], departments: [openComplaint.department] },
+    });
+    addNotification({
+      title: "Project flagged HIGH delay risk",
+      body: `${riskyProject.title} is ${riskyProject.progress}% complete against an expected ${riskyProject.expected_progress}%.`,
+      icon: "fa-diagram-project", type: "error", link: "projects.html",
+      target: { roles: ["Super Admin", "General Manager"], departments: [riskyProject.department] },
+    });
+    if (flagged) {
+      addNotification({
+        title: "Audit anomaly detected",
+        body: `${flagged.user} — ${flagged.action.replace(/_/g, " ").toLowerCase()} scored ${Math.round(flagged.anomaly_score * 100)}/100.`,
+        icon: "fa-shield-halved", type: "error", link: "audit.html",
+        target: { roles: ["Super Admin", "General Manager", "Auditor"] },
+      });
+    }
+    addNotification({
+      title: "Attendance not yet recorded",
+      body: "Today's attendance has not been submitted for all tracked workers.",
+      icon: "fa-clipboard-user", type: "info", link: "attendance.html",
+      target: { roles: ["Super Admin", "General Manager"], departments: [workforceMgr ? workforceMgr.department : "Workforce & Attendance"] },
+    });
+    addNotification({
+      title: "Tasks due this week",
+      body: "You have open tasks ranked CRITICAL by the AI prioritizer.",
+      icon: "fa-list-check", type: "warning", link: "tasks.html",
+      target: { user_ids: ["mem_6"] },
+    });
+    addNotification({
+      title: "Update on your complaint",
+      body: "CMP-2001 has been received and routed to Site Operations.",
+      icon: "fa-comment-dots", type: "info", link: "complaints.html",
+      target: { user_ids: ["client_1"] },
+    });
+  })();
+
+  // ---------------- Documents ----------------
+  // Uploaded files keep their real bytes as a Blob so "Download" returns exactly
+  // what was uploaded. Seeded rows synthesize a small placeholder blob on demand.
+  let documentSeq = 0;
+  const documents = [];
+
+  function seedDocument(name, sizeLabel, by, date, icon, color, department) {
+    documents.push({
+      id: `doc_${++documentSeq}`,
+      name, size_label: sizeLabel, uploaded_by: by, uploaded_by_id: (members.find(m => m.full_name === by) || {}).id || null,
+      uploaded_at: date, icon, color, department, blob: null, seeded: true,
+    });
+  }
+  seedDocument("Structural_Drawings_v3.pdf", "4.2 MB", "Dawit Alemu", "2026-07-20", "fa-file-pdf", "red", "Engineering & Design");
+  seedDocument("Site_Safety_Checklist.docx", "180 KB", "Yonas Bekele", "2026-07-18", "fa-file-word", "blue", "Health & Safety");
+  seedDocument("Q2_Budget_Report.xlsx", "890 KB", "Selam Getachew", "2026-07-15", "fa-file-excel", "green", "Finance & Budget");
+  seedDocument("Site_Photos_June.zip", "22.4 MB", "Meron Tadesse", "2026-07-10", "fa-file-zipper", "yellow", "Site Operations");
+  seedDocument("Contract_Addendum_2.pdf", "1.1 MB", "Kaleb Mulugeta", "2026-07-05", "fa-file-pdf", "red", "Client Relations");
+
+  function iconForFile(name = "") {
+    const ext = name.split(".").pop().toLowerCase();
+    if (["pdf"].includes(ext)) return { icon: "fa-file-pdf", color: "red" };
+    if (["doc", "docx"].includes(ext)) return { icon: "fa-file-word", color: "blue" };
+    if (["xls", "xlsx", "csv"].includes(ext)) return { icon: "fa-file-excel", color: "green" };
+    if (["zip", "rar", "7z"].includes(ext)) return { icon: "fa-file-zipper", color: "yellow" };
+    if (["png", "jpg", "jpeg", "gif", "webp", "svg"].includes(ext)) return { icon: "fa-file-image", color: "purple" };
+    if (["txt", "md", "log"].includes(ext)) return { icon: "fa-file-lines", color: "cyan" };
+    return { icon: "fa-file", color: "gray" };
+  }
+
+  function formatBytes(bytes = 0) {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  function addDocument(file, user) {
+    const { icon, color } = iconForFile(file.name);
+    const doc = {
+      id: `doc_${++documentSeq}`,
+      name: file.name,
+      size_label: formatBytes(file.size),
+      size_bytes: file.size,
+      uploaded_by: user?.name || "Unknown",
+      uploaded_by_id: user?.id || null,
+      uploaded_at: new Date().toISOString(),
+      icon, color,
+      department: user?.department || null,
+      blob: file,           // the real File object — bytes preserved
+      seeded: false,
+    };
+    documents.unshift(doc);
+    return doc;
+  }
+
+  function removeDocument(id) {
+    const i = documents.findIndex(d => d.id === id);
+    if (i === -1) return false;
+    documents.splice(i, 1);
+    return true;
+  }
+
+  function documentsFor(user) {
+    if (!user) return [];
+    if (window.Roles && Roles.ORG_WIDE.includes(user.role)) return documents;
+    if (user.role === "Auditor") return documents;
+    if (user.role === "Client") return documents.filter(d => d.uploaded_by_id === user.id);
+    // Department Manager / Engineer: their department's documents + anything they uploaded
+    return documents.filter(d => !d.department || d.department === user.department || d.uploaded_by_id === user.id);
+  }
+
+  // ---------------- Password reset tokens ----------------
+  const passwordResetTokens = {}; // token -> { email, expires }
+
+  function createPasswordResetToken(email) {
+    const token = Utils.uid("prt") + Math.random().toString(36).slice(2, 10);
+    passwordResetTokens[token] = { email, expires: Date.now() + 1000 * 60 * 30 }; // 30 min
+    return token;
+  }
+
+  function consumePasswordResetToken(token) {
+    const entry = passwordResetTokens[token];
+    if (!entry) return { ok: false, error: "This reset link is invalid." };
+    if (Date.now() > entry.expires) { delete passwordResetTokens[token]; return { ok: false, error: "This reset link has expired." }; }
+    delete passwordResetTokens[token];
+    return { ok: true, email: entry.email };
   }
 
   const chatSuggestions = [
@@ -515,8 +1184,24 @@ const MockData = (() => {
   return {
     departments, members, clients, projects, tasks, complaints, auditLogs, chatSuggestions,
     dailyWorkers, attendance, materialCatalog, suppliers,
+    // absence reason workflow
+    ABSENCE_REASON_CATEGORIES, submitAbsenceReason, reviewAbsenceReason,
     chatbotReply, dashboardStats, complaintCategories, DEPARTMENT_ROUTING,
+    // audit taxonomy (7 audit types)
+    AUDIT_TYPES, AUDIT_TYPE_LIST, auditTypeForAction, auditTypeMeta, actionLabel,
     getMemberById, getMemberByName, getClientById, getDepartmentByName, getProjectById, getDailyWorkerById,
+    // project manager / department staffing
+    getProjectsManagedBy, setProjectManager, setDepartmentHead, assignMemberToDepartment,
+    createDepartment, createMember, createClient,
     recalcMaterialsTotal, nextMaterialId,
+    // live audit trail
+    logAuditEvent,
+    // notifications
+    notifications, addNotification, notificationsFor, unreadCountFor,
+    markNotificationRead, markAllNotificationsRead,
+    // documents
+    documents, addDocument, removeDocument, documentsFor, iconForFile, formatBytes,
+    // password reset
+    createPasswordResetToken, consumePasswordResetToken,
   };
 })();

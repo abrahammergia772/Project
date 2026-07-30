@@ -171,8 +171,8 @@ const MembersPage = (() => {
           <div class="field"><label>Phone</label><input class="input" id="nmPhone" placeholder="+251 9XX XXX XXX"></div>
         </div>
         <div class="tab-panel hidden" data-panel="organization">
-          <div class="field"><label>Department</label><select class="input" id="nmDept">${MockData.departments.map(d=>`<option>${d.name}</option>`).join("")}</select></div>
-          <div class="field"><label>Role</label><select class="input" id="nmRole"><option>Engineer</option><option>Department Manager</option><option>General Manager</option><option>Auditor</option><option>Super Admin</option></select></div>
+          <div class="field"><label for="nmDept">Department</label>${Components.createTypedInput({ id: "nmDept", placeholder: "Type a department...", options: MockData.departments.map(d => d.name) })}</div>
+          <div class="field"><label for="nmRole">Role</label>${Components.createTypedInput({ id: "nmRole", value: "Engineer", placeholder: "Type a role...", allowNew: false, options: Roles.ALL.filter(r => r !== "Client") })}</div>
           <div class="field"><label>Job Title</label><input class="input" id="nmTitle" placeholder="e.g. Site Engineer"></div>
         </div>
         <div class="tab-panel hidden" data-panel="security">
