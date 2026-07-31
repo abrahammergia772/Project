@@ -31,7 +31,8 @@ def _supabase():
         return None
     if _client is None:
         try:
-            _client = create_client(settings.SUPABASE_URL, settings.SUPABASE_SERVICE_KEY)
+            # Normalised: tolerates a pasted /rest/v1 URL (see Settings.supabase_base_url).
+            _client = create_client(settings.supabase_base_url, settings.SUPABASE_SERVICE_KEY)
         except Exception as exc:         # pragma: no cover
             log.warning("Supabase Storage init failed, using local disk: %s", exc)
             return None
@@ -55,7 +56,22 @@ def ensure_bucket() -> None:
             client.storage.create_bucket(settings.SUPABASE_BUCKET, options={"public": False})
             log.info("Created Supabase bucket %s", settings.SUPABASE_BUCKET)
     except Exception as exc:             # pragma: no cover
-        log.warning("Could not verify Supabase bucket: %s", exc)
+        # Supabase raises objects whose str() is often just 'error', which
+        # tells nobody anything. Log the target URL so a misconfigured
+        # SUPABASE_URL is obvious from the log line alone.
+        log.warning(
+            "Could not verify Supabase bucket %r at %s: %s: %s",
+            settings.SUPABASE_BUCKET, settings.supabase_base_url,
+            type(exc).__name__, exc or "(no detail)",
+        )
+        if settings.supabase_url_had_service_path:
+            log.warning(
+                "SUPABASE_URL contains a service path (%s). Use the bare "
+                "project URL: https://<project-ref>.supabase.co",
+                settings.SUPABASE_URL,
+            )
+        log.warning("Falling back to local disk for uploads.")
+        Path(settings.UPLOAD_DIR).mkdir(parents=True, exist_ok=True)
 
 
 def upload(key: str, data: bytes, content_type: str) -> tuple[str, str]:

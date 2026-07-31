@@ -168,6 +168,35 @@ That has now been fixed in code — a wildcard forces credentials off — but yo
 should still set `CORS_ORIGINS` to your exact frontend URL, e.g.
 `https://buildiq-frontend.onrender.com`. Comma-separate multiple origins.
 
+### 3b. `SUPABASE_URL` — wrong URL copied
+
+Your log shows:
+
+```
+GET https://<ref>.supabase.co/rest/v1/storage/v1/bucket "HTTP/2 404 Not Found"
+WARNING buildiq.storage: Could not verify Supabase bucket: 'error'
+```
+
+`SUPABASE_URL` was set to the **REST endpoint** (`.../rest/v1`). The Supabase
+client appends its own service path, so the request became
+`/rest/v1/storage/v1/bucket` — a path that doesn't exist.
+
+Use the **bare project URL**, with no path:
+
+```
+https://ocfyddxklqephrvxqgfb.supabase.co
+```
+
+In the Supabase dashboard: **Settings → API → Project URL**. Don't copy the
+"RESTful endpoint" shown lower on that page.
+
+The code now trims a pasted service path automatically and says so at startup,
+so this is no longer fatal — but set it correctly anyway.
+
+**Also check `SUPABASE_SERVICE_KEY`.** It must be the `service_role` key
+(Settings → API → Project API keys), not the `anon` key. The anon key can't
+create buckets.
+
 ### 4. Optional
 
 - `GROQ_API_KEY` — `ai: heuristic` means the deterministic fallback is running.

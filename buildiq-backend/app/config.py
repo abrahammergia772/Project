@@ -90,8 +90,36 @@ class Settings(BaseSettings):
         return bool(self.AI_ENABLED and self.GROQ_API_KEY)
 
     @property
+    def supabase_base_url(self) -> str:
+        """SUPABASE_URL reduced to the bare project origin.
+
+        The Supabase dashboard shows several URLs and it is easy to copy the
+        wrong one. The client libraries append their own service path
+        (``/storage/v1/...``, ``/rest/v1/...``), so a value that already ends
+        in ``/rest/v1`` produces a doubled path and a 404:
+
+            https://<ref>.supabase.co/rest/v1  +  /storage/v1/bucket
+            -> https://<ref>.supabase.co/rest/v1/storage/v1/bucket   404
+
+        Normalising here means a pasted REST/GraphQL URL still works.
+        """
+        url = self.SUPABASE_URL.strip().rstrip("/")
+        if not url:
+            return ""
+        for suffix in ("/rest/v1", "/graphql/v1", "/storage/v1", "/auth/v1", "/realtime/v1"):
+            if url.endswith(suffix):
+                url = url[: -len(suffix)].rstrip("/")
+        return url
+
+    @property
+    def supabase_url_had_service_path(self) -> bool:
+        """True when SUPABASE_URL needed trimming, so startup can warn."""
+        return bool(self.SUPABASE_URL.strip()) and \
+            self.SUPABASE_URL.strip().rstrip("/") != self.supabase_base_url
+
+    @property
     def storage_ready(self) -> bool:
-        return bool(self.SUPABASE_URL and self.SUPABASE_SERVICE_KEY)
+        return bool(self.supabase_base_url and self.SUPABASE_SERVICE_KEY)
 
 
 @lru_cache

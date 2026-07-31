@@ -62,6 +62,12 @@ async def lifespan(_: FastAPI):
             "Set ENV=production on any publicly reachable deployment.",
             settings.ENV,
         )
+    if settings.supabase_url_had_service_path:
+        log.warning(
+            "SUPABASE_URL was %r -- trimmed to %s. Set it to the bare project "
+            "URL (https://<project-ref>.supabase.co), not the REST endpoint.",
+            settings.SUPABASE_URL, settings.supabase_base_url,
+        )
     if settings.DATABASE_URL.startswith("sqlite"):
         log.warning(
             "Using SQLite on ephemeral disk -- ALL DATA IS LOST on every deploy "
