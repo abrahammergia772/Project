@@ -1,9 +1,53 @@
-# Superseded — see ../render.yaml at the REPO ROOT.
+# ============================================================
+# BuildIQ API — Render service config
 #
-# Render only reads render.yaml from the repository root, so the Blueprint for
-# BOTH services lives there and sets `rootDir` per service. Keeping a second
-# copy here caused confusion (and a failed deploy: the build ran from the repo
-# root, where requirements.txt does not exist).
+# Frontend and backend are deployed as SEPARATE Render services, so this file
+# describes only the API. (There is also a root-level render.yaml that defines
+# both services as one Blueprint — use whichever suits you, not both.)
 #
-# To deploy: New -> Blueprint -> pick this repo. Render finds /render.yaml and
-# creates buildiq-api and buildiq-frontend together.
+# Deploying this service by hand instead? Set these in the dashboard:
+#   Root Directory   : buildiq-backend      <-- REQUIRED
+#   Build Command    : pip install -r requirements.txt
+#   Start Command    : uvicorn app.main:app --host 0.0.0.0 --port $PORT
+#   Health Check Path: /health
+#
+# "Root Directory" is the one people miss. Without it the build runs at the
+# repo root, where there is no requirements.txt, and fails with
+# "Could not open requirements file".
+# ============================================================
+services:
+  - type: web
+    name: buildiq-api
+    runtime: python
+    rootDir: buildiq-backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      # Full x.y.z. A two-part value ("3.13") can be ignored, silently
+      # restoring Render's default (3.14), which has no wheels for
+      # bcrypt/pydantic/cryptography and forces a failing source build.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+      - key: SECRET_KEY
+        generateValue: true
+      # Set these in the dashboard — never commit them.
+      - key: DATABASE_URL
+        sync: false
+      # MUST be the exact frontend origin, e.g.
+      #   https://buildiq-frontend.onrender.com
+      # Leaving it "*" disables credentials, and browsers then block the call.
+      - key: CORS_ORIGINS
+        sync: false
+      # Bare project URL only: https://<project-ref>.supabase.co
+      # Not the REST endpoint (.../rest/v1).
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: SEED_ON_STARTUP
+        value: "true"
