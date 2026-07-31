@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+
+# Local databases — the app requires Supabase Postgres; any .db here is a
+# throwaway from a test run.
+*.db
+*.sqlite3
+
+# Secrets. Never commit these; set them in the Render dashboard.
+.env
+.env.*
+!.env.example
+
+# Uploaded files when Supabase Storage isn't configured
+buildiq-backend/uploads/
+
+# Node (test harness only — the frontend has no build step)
+node_modules/
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

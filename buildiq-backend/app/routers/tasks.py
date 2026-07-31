@@ -14,7 +14,7 @@ from ..deps import (
     assignable_workers, managed_projects, new_id, push_notification, record_audit,
     task_dict, utcnow,
 )
-from ..models import DailyWorker, Project, Task, User
+from ..models import Project, Task, User
 from ..schemas import OkResponse, TaskAssign, TaskCreate, TaskIdsRequest, TaskOut, TaskUpdate
 from ..security import (
     AUDITOR, CLIENT, DEPARTMENT_MANAGER, ORG_WIDE, PROJECT_MANAGER,

@@ -13,9 +13,9 @@ from .. import ai_engine
 from ..database import get_db
 from ..deps import complaint_dict, member_dict, new_id, project_dict, push_notification, record_audit
 from ..models import Complaint, Department, Project, User
-from ..schemas import DepartmentCreate, DepartmentHeadAssign, OkResponse
+from ..schemas import DepartmentCreate, DepartmentHeadAssign
 from ..security import (
-    CLIENT, DEPARTMENT_MANAGER, ENGINEER, ORG_WIDE, PROJECT_MANAGER,
+    CLIENT, DEPARTMENT_MANAGER, ENGINEER, PROJECT_MANAGER,
     can_assign_department_head, can_view_all_departments, get_current_user,
 )
 

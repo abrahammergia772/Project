@@ -18,7 +18,7 @@ from .models import (
 )
 from .security import (
     AUDITOR, CLIENT, DEPARTMENT_MANAGER, ENGINEER, ORG_WIDE, PROJECT_MANAGER,
-    WORKFORCE_DEPT, has_full_project_access, is_workforce_dept,
+    has_full_project_access, is_workforce_dept,
 )
 
 
