@@ -88,8 +88,10 @@ values
    '["Department Manager"]'::jsonb,'Workforce & Attendance','Workforce Manager',
    'Wolaita Construction Group','+251911000007','Active',7),
 
+  -- experience_years is NOT NULL DEFAULT 0. Passing an explicit null OVERRIDES
+  -- the default and violates the constraint, so send 0 for a client contact.
   ('mem_cl_1','client@buildiq.et','$2b$12$abQylmp0e1ARpyCQ7mZTaObZtkAqRj3eBSL8DuFFWlO/FbHXqGFfK','Abebe Kebede','Client',
-   '["Client"]'::jsonb,null,null,'Wolaita Development PLC','+251911234567','Active',null)
+   '["Client"]'::jsonb,null,null,'Wolaita Development PLC','+251911234567','Active',0)
 on conflict (id) do update set
   email = excluded.email, hashed_password = excluded.hashed_password,
   full_name = excluded.full_name, role = excluded.role, roles = excluded.roles,
@@ -171,26 +173,31 @@ on conflict (id) do update set
   full_name = excluded.full_name, daily_rate = excluded.daily_rate;
 
 -- ------------------------------------------------------------------ attendance
--- Five working days for one engineer and two daily workers, including an
--- absence with an approved reason so the review workflow has something to show.
-insert into public.attendance (id, person_id, person_name, person_type, date, status, department)
-select
-  'att_' || p.pid || '_' || to_char(d.day, 'YYYYMMDD'),
-  p.pid, p.pname, p.ptype, d.day,
-  case when p.pid = 'mem_6' and d.day = current_date - 2 then 'Absent' else 'Present' end,
-  'Site Operations'
-from (values
-        ('mem_6','Samuel Alemayehu','staff'),
-        ('dw_1','Tadesse Bekele','daily_worker'),
-        ('dw_2','Almaz Hailu','daily_worker')
-     ) as p(pid, pname, ptype)
-cross join (
-  select (current_date - offs)::date as day
-  from generate_series(1, 5) as offs
-) as d
+-- Five working days for one engineer and two daily workers. One absence is
+-- left unexplained-then-approved so the reason workflow has something to show.
+-- Written as explicit rows so the whole file can be executed and verified
+-- before you run it against a real database.
+insert into public.attendance
+  (id, person_id, person_name, person_type, date, status, department, recorded_by)
+values
+  ('att_mem_6_d1','mem_6','Samuel Alemayehu','staff',(current_date - 1),'Present','Site Operations','mem_wf_1'),
+  ('att_mem_6_d2','mem_6','Samuel Alemayehu','staff',(current_date - 2),'Absent','Site Operations','mem_wf_1'),
+  ('att_mem_6_d3','mem_6','Samuel Alemayehu','staff',(current_date - 3),'Present','Site Operations','mem_wf_1'),
+  ('att_mem_6_d4','mem_6','Samuel Alemayehu','staff',(current_date - 4),'Present','Site Operations','mem_wf_1'),
+  ('att_mem_6_d5','mem_6','Samuel Alemayehu','staff',(current_date - 5),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_1_d1','dw_1','Tadesse Bekele','daily_worker',(current_date - 1),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_1_d2','dw_1','Tadesse Bekele','daily_worker',(current_date - 2),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_1_d3','dw_1','Tadesse Bekele','daily_worker',(current_date - 3),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_1_d4','dw_1','Tadesse Bekele','daily_worker',(current_date - 4),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_1_d5','dw_1','Tadesse Bekele','daily_worker',(current_date - 5),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_2_d1','dw_2','Almaz Hailu','daily_worker',(current_date - 1),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_2_d2','dw_2','Almaz Hailu','daily_worker',(current_date - 2),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_2_d3','dw_2','Almaz Hailu','daily_worker',(current_date - 3),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_2_d4','dw_2','Almaz Hailu','daily_worker',(current_date - 4),'Present','Site Operations','mem_wf_1'),
+  ('att_dw_2_d5','dw_2','Almaz Hailu','daily_worker',(current_date - 5),'Present','Site Operations','mem_wf_1')
 on conflict (id) do nothing;
 
--- The absence above, explained and approved.
+-- The absence above, explained and approved by the Workforce manager.
 update public.attendance
    set reason_category     = 'Medical Appointment',
        reason              = 'Hospital appointment, documentation provided.',

@@ -115,3 +115,150 @@ def test_workforce_department_exists():
 def test_a_multi_role_user_exists():
     """Exercises the role switcher."""
     assert '"Department Manager","Project Manager"' in SAMPLE
+
+
+# ---------------------------------------------------------------------------
+# Execution test
+#
+# Parsing is not enough. The first version of this file passed every parse
+# check and still failed in Supabase with
+#
+#   ERROR 23502: null value in column "experience_years" violates not-null
+#
+# because an explicit NULL overrides a column DEFAULT. Executing the file
+# against a schema built from the real AST -- NOT NULL and DEFAULT preserved --
+# catches that class of error before it reaches a database.
+# ---------------------------------------------------------------------------
+import re
+import sqlite3
+
+
+def _sqlite_from_schema():
+    """CREATE TABLE statements mirroring the real NOT NULL / DEFAULT flags."""
+    ddl = []
+    for raw in pglast.parse_sql(SCHEMA):
+        stmt = raw.stmt
+        if type(stmt).__name__ != "CreateStmt":
+            continue
+        cols = []
+        for el in stmt.tableElts or []:
+            if type(el).__name__ != "ColumnDef":
+                continue
+            cons = el.constraints or []
+            nn = any(type(c).__name__ == "Constraint" and c.contype == 1 for c in cons)
+            pk = any(type(c).__name__ == "Constraint" and c.contype == 5 for c in cons)
+            df = any(type(c).__name__ == "Constraint" and c.contype == 2 for c in cons)
+            # Treat "id" as the primary key: the real schema declares it via a
+            # table-level constraint, which ON CONFLICT (id) needs to resolve.
+            cols.append(
+                f'"{el.colname}" TEXT'
+                + (" NOT NULL" if nn else "")
+                + (" DEFAULT ''" if df else "")
+                + (" PRIMARY KEY" if (pk or el.colname == "id") else "")
+            )
+        ddl.append(f'CREATE TABLE "{stmt.relation.relname}" ({", ".join(cols)});')
+    return "\n".join(ddl)
+
+
+def _to_sqlite(sql: str) -> str:
+    sql = re.sub(r"--.*", "", sql)
+    sql = sql.replace("::jsonb", "").replace("::text", "").replace("::date", "")
+    sql = sql.replace("public.", "")
+    sql = re.sub(r"\bnow\(\)\s*-\s*interval\s*'[^']*'", "datetime('now')", sql)
+    sql = sql.replace("now()", "datetime('now')")
+    sql = re.sub(r"\(current_date - (\d+)\)", r"date('now','-\1 day')", sql)
+    sql = sql.replace("current_date", "date('now')")
+    sql = re.sub(r"on conflict \(id\) do update set[^;]*",
+                 "on conflict(id) do nothing", sql, flags=re.I)
+    return sql.replace("begin;", "").replace("commit;", "")
+
+
+def _split(sql: str):
+    out, buf, depth, instr = [], "", 0, False
+    for ch in sql:
+        buf += ch
+        if ch == "'":
+            instr = not instr
+        elif not instr and ch == "(":
+            depth += 1
+        elif not instr and ch == ")":
+            depth -= 1
+        elif not instr and ch == ";" and depth == 0:
+            if buf.strip(" \n;"):
+                out.append(buf)
+            buf = ""
+    return out
+
+
+def _run_sample():
+    con = sqlite3.connect(":memory:")
+    con.executescript(_sqlite_from_schema())
+    for stmt in _split(_to_sqlite(SAMPLE)):
+        con.execute(stmt)
+    return con
+
+
+def test_sample_executes_without_constraint_violations():
+    """Every statement runs -- this is what the parse-only checks missed."""
+    con = _run_sample()
+    counts = {t: con.execute(f"select count(*) from {t}").fetchone()[0]
+              for t in ["departments", "clients", "users", "projects", "tasks",
+                        "complaints", "daily_workers", "attendance", "audit_logs"]}
+    for table, n in counts.items():
+        assert n > 0, f"{table} has no rows after running the sample"
+
+
+def test_no_explicit_null_into_a_not_null_column():
+    """The exact production failure: NULL overrides a DEFAULT."""
+    notnull = {}
+    for raw in pglast.parse_sql(SCHEMA):
+        stmt = raw.stmt
+        if type(stmt).__name__ != "CreateStmt":
+            continue
+        cols = set()
+        for el in stmt.tableElts or []:
+            if type(el).__name__ != "ColumnDef":
+                continue
+            if any(type(c).__name__ == "Constraint" and c.contype == 1
+                   for c in (el.constraints or [])):
+                cols.add(el.colname)
+        notnull[stmt.relation.relname] = cols
+
+    for raw in pglast.parse_sql(SAMPLE):
+        stmt = raw.stmt
+        if type(stmt).__name__ != "InsertStmt":
+            continue
+        table = stmt.relation.relname
+        cols = [c.name for c in (stmt.cols or [])]
+        sel = stmt.selectStmt
+        if type(sel).__name__ != "SelectStmt" or not sel.valuesLists:
+            continue
+        for row in sel.valuesLists:
+            for i, val in enumerate(row):
+                if i < len(cols) and type(val).__name__ == "A_Const" \
+                        and getattr(val, "isnull", False):
+                    assert cols[i] not in notnull.get(table, set()), (
+                        f"{table}.{cols[i]} is set to NULL but is NOT NULL "
+                        "-- an explicit NULL overrides the column DEFAULT")
+
+
+def test_running_the_sample_twice_does_not_duplicate():
+    con = _run_sample()
+    before = con.execute("select count(*) from users").fetchone()[0]
+    for stmt in _split(_to_sqlite(SAMPLE)):
+        con.execute(stmt)
+    after = con.execute("select count(*) from users").fetchone()[0]
+    assert before == after, f"re-running duplicated rows: {before} -> {after}"
+
+
+def test_the_absence_workflow_has_data():
+    con = _run_sample()
+    n = con.execute(
+        "select count(*) from attendance where reason_status='approved'").fetchone()[0]
+    assert n >= 1, "no approved absence reason to demonstrate the review queue"
+
+
+def test_uses_no_postgres_only_syntax_we_cannot_verify():
+    """generate_series is valid PG but unrunnable here, so it hid a whole
+    INSERT from the execution test. Keep the sample fully verifiable."""
+    assert "generate_series" not in SAMPLE
