@@ -65,6 +65,23 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.CORS_ORIGINS.split(",") if o.strip()]
 
     @property
+    def cors_allows_any_origin(self) -> bool:
+        return self.cors_origin_list == ["*"]
+
+    @property
+    def cors_allow_credentials(self) -> bool:
+        """Never send credentials to a wildcard origin.
+
+        Starlette treats allow_origins=["*"] + allow_credentials=True by
+        echoing back whichever Origin asked, together with
+        Access-Control-Allow-Credentials: true. That is strictly worse than a
+        real wildcard: any site a signed-in user visits can then call this API
+        with their cookies. If CORS_ORIGINS was left at its permissive default
+        we drop credentials rather than silently granting that.
+        """
+        return not self.cors_allows_any_origin
+
+    @property
     def is_production(self) -> bool:
         return self.ENV.lower() == "production"
 

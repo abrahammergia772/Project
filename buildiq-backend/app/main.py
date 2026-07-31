@@ -46,6 +46,28 @@ async def lifespan(_: FastAPI):
              else "local heuristics (no GROQ_API_KEY)")
     log.info("Storage: %s", storage.backend_name())
 
+    # Loud warnings for a deployment that is reachable publicly but still
+    # configured for development. These are the settings that look fine in a
+    # log line yet quietly weaken a live service.
+    if settings.cors_allows_any_origin:
+        log.warning(
+            "CORS_ORIGINS is '*' -- credentials are DISABLED so browsers cannot "
+            "send cookies. Set CORS_ORIGINS to your frontend URL "
+            "(e.g. https://your-frontend.onrender.com)."
+        )
+    if not settings.is_production:
+        log.warning(
+            "ENV=%s (not 'production'). /docs is public and "
+            "POST /auth/forgot-password returns the reset token in its response. "
+            "Set ENV=production on any publicly reachable deployment.",
+            settings.ENV,
+        )
+    if settings.DATABASE_URL.startswith("sqlite"):
+        log.warning(
+            "Using SQLite on ephemeral disk -- ALL DATA IS LOST on every deploy "
+            "and restart. Set DATABASE_URL to your Supabase Postgres URI."
+        )
+
     # Create tables. For real migrations use Alembic; this keeps first-run simple.
     Base.metadata.create_all(bind=engine)
     storage.ensure_bucket()
@@ -81,7 +103,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=True,
+    # False when origins are a wildcard -- see Settings.cors_allow_credentials.
+    allow_credentials=settings.cors_allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["Content-Disposition"],      # so the browser sees download filenames

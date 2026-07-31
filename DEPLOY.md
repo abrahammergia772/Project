@@ -123,6 +123,63 @@ entirely in the browser and needs no backend at all.
 
 ---
 
+## ✅ Your API is live — now finish the configuration
+
+`https://constructionai-q9er.onrender.com` is up and serving all 76 endpoints.
+But `/health` reports:
+
+```json
+{"status":"online","env":"development","database":"connected",
+ "ai":"heuristic","storage":"local"}
+```
+
+Three things still need setting in **Render → Environment**. Each is a real
+issue on a public URL, in priority order.
+
+### 1. `DATABASE_URL` — your data is being deleted (most urgent)
+
+`storage: local` and the default SQLite path mean the database lives on
+Render's ephemeral disk. **Every deploy and every cold start wipes it.** All
+46 seeded users, 15 projects, and anything a real user enters disappear.
+
+Set `DATABASE_URL` to your Supabase pooler URI (format above) and run the
+migrations once.
+
+### 2. `ENV=production` — dev behaviour is exposed
+
+`env: development` currently means:
+
+- **`/docs` is publicly browsable** — the full API surface, open to anyone.
+- **`POST /auth/forgot-password` returns the reset token in its response.**
+  Verified against the live service: it hands back a working
+  `demo_token` for any address. That is a **full account-takeover path** for
+  any account whose email address is known. It is intentional for local
+  development and must not be public.
+
+Set `ENV=production`.
+
+### 3. `CORS_ORIGINS` — currently accepts every website
+
+Left at the `*` default. The API previously echoed back *any* Origin
+alongside `Access-Control-Allow-Credentials: true`, meaning any site a
+signed-in user visited could call this API as them.
+
+That has now been fixed in code — a wildcard forces credentials off — but you
+should still set `CORS_ORIGINS` to your exact frontend URL, e.g.
+`https://buildiq-frontend.onrender.com`. Comma-separate multiple origins.
+
+### 4. Optional
+
+- `GROQ_API_KEY` — `ai: heuristic` means the deterministic fallback is running.
+  Everything works; responses are rule-based rather than LLM-generated.
+- `SEED_ON_STARTUP=false` once you have real data, so demo records stop being
+  recreated.
+
+After saving, Render redeploys. Re-check `/health` — it should read
+`env: production` with a Postgres-backed database.
+
+---
+
 ## Verify
 
 ```bash
