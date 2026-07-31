@@ -35,7 +35,7 @@ const Roles = (() => {
     if (canResolveDeptComplaints(user.role)) return complaint.department === user.department;
     // A Project Manager resolves complaints raised against their own projects.
     if (user.role === PROJECT_MANAGER) {
-      const projects = allProjects || (window.MockData ? MockData.projects : []);
+      const projects = allProjects || (window.DataStore ? DataStore.projects : []);
       return managedProjects(user, projects).some(p => p.title === complaint.project);
     }
     return false;
@@ -45,7 +45,7 @@ const Roles = (() => {
     if (canResolveAllComplaints(user.role)) return allComplaints;
     if (canResolveDeptComplaints(user.role)) return allComplaints.filter(c => c.department === user.department);
     if (user.role === PROJECT_MANAGER) {
-      const projects = allProjects || (window.MockData ? MockData.projects : []);
+      const projects = allProjects || (window.DataStore ? DataStore.projects : []);
       const titles = new Set(managedProjects(user, projects).map(p => p.title));
       return allComplaints.filter(c => titles.has(c.project) || c.submitted_by === user.id);
     }
@@ -172,7 +172,7 @@ const Roles = (() => {
     if (ORG_WIDE.includes(user.role)) return allMembers;
     if (user.role === "Department Manager") return allMembers.filter(m => m.department === user.department);
     if (user.role === PROJECT_MANAGER) {
-      const projects = window.MockData ? MockData.projects : [];
+      const projects = window.DataStore ? DataStore.projects : [];
       const ids = new Set(managedTeam(user, projects).map(m => m.id));
       ids.add(user.id);
       return allMembers.filter(m => ids.has(m.id));
@@ -197,7 +197,7 @@ const Roles = (() => {
     if (!canAssignTasks(user.role)) return [];
     // A Project Manager can only assign to people on the projects they run.
     if (user.role === PROJECT_MANAGER) {
-      const projects = allProjects || (window.MockData ? MockData.projects : []);
+      const projects = allProjects || (window.DataStore ? DataStore.projects : []);
       const mine = managedProjects(user, projects);
       const ids = new Set(mine.map(p => p.id));
       const team = managedTeam(user, projects).map(m => ({
@@ -257,7 +257,7 @@ const Roles = (() => {
     if (canTakeAttendance(user)) return allAttendance; // workforce dept oversees everyone
     if (user.role === "Department Manager") return allAttendance.filter(a => a.department === user.department);
     if (user.role === PROJECT_MANAGER) {
-      const projects = window.MockData ? MockData.projects : [];
+      const projects = window.DataStore ? DataStore.projects : [];
       const ids = new Set(managedTeam(user, projects).map(m => m.id));
       const projIds = new Set(managedProjects(user, projects).map(p => p.id));
       return allAttendance.filter(a => ids.has(a.person_id) || projIds.has(a.project_id));

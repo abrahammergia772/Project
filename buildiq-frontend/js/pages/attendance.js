@@ -64,16 +64,18 @@ const AttendancePage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["attendance","members","dailyWorkers","departments","absenceReasons"]);
     user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
     document.getElementById("attTabContent").innerHTML = Components.skeletonGrid(4, "row");
 
-    scopedAttendance = Roles.visibleAttendance(user, MockData.attendance);
-    scopedWorkers = Roles.visibleDailyWorkers(user, MockData.dailyWorkers);
+    scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
+    scopedWorkers = Roles.visibleDailyWorkers(user, DataStore.dailyWorkers);
     scopedStaff = Roles.canTakeAttendance(user)
-      ? MockData.members.filter(m => m.role === "Engineer" || m.role === "Department Manager")
-      : MockData.members.filter(m => (m.role === "Engineer" || m.role === "Department Manager") && m.department === user.department);
+      ? DataStore.members.filter(m => m.role === "Engineer" || m.role === "Department Manager")
+      : DataStore.members.filter(m => (m.role === "Engineer" || m.role === "Department Manager") && m.department === user.department);
 
     renderStats();
     renderTab(activeTab);
@@ -89,7 +91,7 @@ const AttendancePage = (() => {
   function renderStats() {
     // Roles without register access see their own attendance summary instead.
     if (!Roles.canViewAttendance(user)) {
-      const mine = Roles.ownAttendance(user, MockData.attendance);
+      const mine = Roles.ownAttendance(user, DataStore.attendance);
       const absences = mine.filter(a => a.status === "Absent");
       const unexplained = absences.filter(a => !a.reason).length;
       const pending = absences.filter(a => a.reason_status === "Pending").length;
@@ -151,7 +153,7 @@ const AttendancePage = (() => {
   }
 
   function renderMyAttendance(el) {
-    const mine = Roles.ownAttendance(user, MockData.attendance).sort((a, b) => b.date.localeCompare(a.date));
+    const mine = Roles.ownAttendance(user, DataStore.attendance).sort((a, b) => b.date.localeCompare(a.date));
     if (!mine.length) {
       el.innerHTML = Components.createEmptyState("fa-calendar-xmark", "No attendance recorded yet",
         "Once the Workforce & Attendance department records your days, they'll appear here.");
@@ -205,9 +207,9 @@ const AttendancePage = (() => {
   }
 
   function openReasonModal(date, el) {
-    const rec = MockData.attendance.find(a => a.person_id === user.id && a.date === date);
+    const rec = DataStore.attendance.find(a => a.person_id === user.id && a.date === date);
     if (!rec) return;
-    const cats = MockData.ABSENCE_REASON_CATEGORIES;
+    const cats = ReferenceData.ABSENCE_REASON_CATEGORIES;
 
     Components.createModal({
       title: `Explain your absence — ${new Date(date).toDateString()}`,
@@ -250,7 +252,7 @@ const AttendancePage = (() => {
 
   // ---------------- Absence Reasons queue (managers / GM / auditor / admin) ----------------
   function renderReasonsQueue(el) {
-    const all = Roles.visibleAbsenceReasons(user, MockData.attendance)
+    const all = Roles.visibleAbsenceReasons(user, DataStore.attendance)
       .sort((a, b) => (b.reason_submitted_at || "").localeCompare(a.reason_submitted_at || ""));
     const readOnly = user.role === "Auditor";
 
@@ -260,7 +262,7 @@ const AttendancePage = (() => {
           <option value="">All statuses</option><option>Pending</option><option>Accepted</option><option>Rejected</option>
         </select>
         <select class="input filter-select" id="reasonCatFilter">
-          <option value="">All categories</option>${MockData.ABSENCE_REASON_CATEGORIES.map(c => `<option>${c}</option>`).join("")}
+          <option value="">All categories</option>${ReferenceData.ABSENCE_REASON_CATEGORIES.map(c => `<option>${c}</option>`).join("")}
         </select>
         ${readOnly ? `<span class="readonly-pill"><i class="fa-solid fa-eye"></i> Read-only</span>` : ""}
       </div>
@@ -377,7 +379,7 @@ const AttendancePage = (() => {
   }
 
   function attendanceRowHtml(p) {
-    const existing = MockData.attendance.find(a => a.person_id === p.id && a.date === selectedDate);
+    const existing = DataStore.attendance.find(a => a.person_id === p.id && a.date === selectedDate);
     const current = pendingMarks[p.id] || existing?.status || null;
     return `
       <div class="take-attendance-row">
@@ -394,7 +396,7 @@ const AttendancePage = (() => {
 
   function loadExistingMarksForDate() {
     // Pre-fill pendingMarks with whatever's already recorded for the selected date so re-opening the page doesn't lose data
-    MockData.attendance.filter(a => a.date === selectedDate).forEach(a => { if (!(a.person_id in pendingMarks)) pendingMarks[a.person_id] = a.status; });
+    DataStore.attendance.filter(a => a.date === selectedDate).forEach(a => { if (!(a.person_id in pendingMarks)) pendingMarks[a.person_id] = a.status; });
   }
 
   async function saveAttendance(people) {
@@ -411,12 +413,12 @@ const AttendancePage = (() => {
       Components.createToast(err.message || "Could not save attendance.", "error");
       return;
     }
-    scopedAttendance = Roles.visibleAttendance(user, MockData.attendance);
+    scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
 
     const absentees = people.filter(p => pendingMarks[p.id] === "Absent");
-    MockData.logAuditEvent(user, "UPDATE_RECORD", `attendance/${selectedDate}`);
+    AppEvents.logAudit(user, "UPDATE_RECORD", `attendance/${selectedDate}`);
     if (absentees.length) {
-      MockData.addNotification({
+      AppEvents.notify({
         title: `${absentees.length} absence${absentees.length > 1 ? "s" : ""} recorded`,
         body: `${selectedDate}: ${absentees.slice(0, 3).map(p => p.name).join(", ")}${absentees.length > 3 ? ` +${absentees.length - 3} more` : ""}.`,
         icon: "fa-user-slash", type: "warning", link: "attendance.html",

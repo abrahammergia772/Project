@@ -37,13 +37,15 @@ const MembersPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["members","departments","projects"]);
     const user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell(user);
     content.innerHTML += `<div id="membersLoading" class="members-grid">${Components.skeletonGrid(8)}</div>`;
 
     const deptFilter = document.getElementById("deptFilter");
-    MockData.departments.forEach(d => deptFilter.innerHTML += `<option>${d.name}</option>`);
+    DataStore.departments.forEach(d => deptFilter.innerHTML += `<option>${d.name}</option>`);
 
     document.getElementById("cardViewBtn").classList.toggle("active", viewMode === "cards");
     document.getElementById("tableViewBtn").classList.toggle("active", viewMode === "table");
@@ -171,7 +173,7 @@ const MembersPage = (() => {
           <div class="field"><label>Phone</label><input class="input" id="nmPhone" placeholder="+251 9XX XXX XXX"></div>
         </div>
         <div class="tab-panel hidden" data-panel="organization">
-          <div class="field"><label for="nmDept">Department</label>${Components.createTypedInput({ id: "nmDept", placeholder: "Type a department...", options: MockData.departments.map(d => d.name) })}</div>
+          <div class="field"><label for="nmDept">Department</label>${Components.createTypedInput({ id: "nmDept", placeholder: "Type a department...", options: DataStore.departments.map(d => d.name) })}</div>
           <div class="field"><label for="nmRole">Role</label>${Components.createTypedInput({ id: "nmRole", value: "Engineer", placeholder: "Type a role...", allowNew: false, options: Roles.ALL.filter(r => r !== "Client") })}</div>
           <div class="field"><label>Job Title</label><input class="input" id="nmTitle" placeholder="e.g. Site Engineer"></div>
         </div>

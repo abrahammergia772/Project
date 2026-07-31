@@ -40,6 +40,8 @@ const TasksPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["tasks","projects","members","dailyWorkers"]);
     const user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell(user);
@@ -91,7 +93,7 @@ const TasksPage = (() => {
     else if (tab === "team") el.innerHTML = renderTaskList(teamTasks, false);
     else if (tab === "assigned") {
       // Everything this user has sent out to other people.
-      const mine = AIEngine.prioritizeTasks(MockData.tasks.filter(t => t.assigned_by === user.name));
+      const mine = AIEngine.prioritizeTasks(DataStore.tasks.filter(t => t.assigned_by === user.name));
       el.innerHTML = mine.length
         ? renderTaskList(mine, false)
         : Components.createEmptyState("fa-user-plus", "You haven't assigned any tasks yet",
@@ -224,14 +226,14 @@ const TasksPage = (() => {
   // Available to Department Manager, General Manager, Auditor and Super Admin.
   // Managers are limited to their own department; the others are org-wide.
   function openAssignTaskModal(user) {
-    const workers = Roles.assignableWorkers(user, MockData.members, MockData.dailyWorkers);
+    const workers = Roles.assignableWorkers(user, DataStore.members, DataStore.dailyWorkers);
     if (!workers.length) {
       Components.createToast("There are no workers in your assignable scope.", "info");
       return;
     }
     const projects = Roles.ORG_WIDE.includes(user.role) || user.role === "Auditor"
-      ? MockData.projects
-      : MockData.projects.filter(p => p.department === user.department);
+      ? DataStore.projects
+      : DataStore.projects.filter(p => p.department === user.department);
 
     const scopeNote = Roles.ORG_WIDE.includes(user.role) || user.role === "Auditor"
       ? "You can assign to any worker in the organization."
@@ -297,7 +299,7 @@ const TasksPage = (() => {
   }
 
   function openNewTaskModal(user) {
-    const projectOptions = Roles.visibleProjects(user, MockData.projects);
+    const projectOptions = Roles.visibleProjects(user, DataStore.projects);
     Components.createModal({
       title: "New Task",
       bodyHtml: `

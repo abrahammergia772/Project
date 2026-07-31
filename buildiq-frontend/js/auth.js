@@ -116,7 +116,7 @@ const Auth = (() => {
     // Leave a trail — switching hats is a permission-relevant action.
     try {
       if (window.MockData?.logAuditEvent) {
-        MockData.logAuditEvent(updated, "ROLE_MISUSE", `auth/role-switch/${role}`);
+        AppEvents.logAudit(updated, "ROLE_MISUSE", `auth/role-switch/${role}`);
       }
     } catch { /* auditing must never block the switch */ }
 

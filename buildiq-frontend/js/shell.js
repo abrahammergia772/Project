@@ -37,12 +37,12 @@ const Shell = (() => {
 
   function badgeCounts(user) {
     if (BUILDIQ_CONFIG.MOCK_MODE) {
-      const scopedComplaints = Roles.visibleComplaints(user, MockData.complaints);
-      const scopedAttendance = Roles.visibleAttendance(user, MockData.attendance);
+      const scopedComplaints = Roles.visibleComplaints(user, DataStore.complaints);
+      const scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
       const today = new Date().toISOString().slice(0, 10);
       return {
         open_complaints: scopedComplaints.filter(c => c.status !== "resolved").length,
-        audit_flags: MockData.auditLogs.filter(l => l.is_flagged).length,
+        audit_flags: DataStore.auditLogs.filter(l => l.is_flagged).length,
         absent_today: scopedAttendance.filter(a => a.date === today && a.status === "Absent").length,
       };
     }

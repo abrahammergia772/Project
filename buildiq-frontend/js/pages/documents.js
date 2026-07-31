@@ -21,6 +21,8 @@ const DocumentsPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["documents","projects","members"]);
     user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = `

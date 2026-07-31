@@ -31,6 +31,8 @@ const ChatbotPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["projects"]);
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
     renderConvList();
@@ -49,7 +51,7 @@ const ChatbotPage = (() => {
   }
 
   function renderSuggestions() {
-    document.getElementById("suggestionChips").innerHTML = MockData.chatSuggestions.map(s => `<span class="example-chip" style="cursor:pointer;">${s}</span>`).join("");
+    document.getElementById("suggestionChips").innerHTML = ReferenceData.chatSuggestions.map(s => `<span class="example-chip" style="cursor:pointer;">${s}</span>`).join("");
     Utils.qsa(".example-chip").forEach(chip => chip.addEventListener("click", () => {
       document.getElementById("chatInput").value = chip.textContent;
       sendMessage();

@@ -681,6 +681,15 @@ const API = (() => {
     // Auth
     // `portal` is optional and purely for the audit trail: the administrator
     // entrance passes "admin" so the server can record which door was used.
+    // Public: the signup form needs department/project names before the user
+    // has a token, so this must not require auth.
+    getSignupOptions: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({
+          departments: MockData.departments.map(d => ({ name: d.name, description: d.description })),
+          projects: MockData.projects.map(p => ({ title: p.title, department: p.department })),
+        })
+      : request("/auth/signup-options", { auth: false }),
+
     login: (email, password, portal = null) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.login(email, password)
       : request("/auth/login", { method: "POST", body: { email, password, portal }, auth: false }),
@@ -748,6 +757,29 @@ const API = (() => {
 
     // Projects
     getProjects: (params) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.projects(params) : request("/projects", { params }),
+
+    // ---- Reference/collection reads that previously came from MockData ----
+    // These endpoints already existed server-side but had no client method,
+    // so pages fell back to reading MockData directly -- which meant parts of
+    // the UI showed fabricated data even with MOCK_MODE off.
+    getClients: (params) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.clients)
+      : request("/clients", { params }),
+    getDailyWorkers: (params) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.dailyWorkers)
+      : request("/daily-workers", { params }),
+    getDashboardStats: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.dashboardStats(Auth.getUser()?.role))
+      : request("/dashboard/stats"),
+    getAttendance: (params) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.attendance)
+      : request("/attendance", { params }),
+    getAbsenceReasons: (params) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve([])
+      : request("/attendance/reasons", { params }),
+    getAuditTypes: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(ReferenceData.AUDIT_TYPE_LIST)
+      : request("/audit/types"),
     createProject: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.createProject(payload) : request("/projects", { method: "POST", body: payload }),
     createDepartment: (payload) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.createDepartment(payload)

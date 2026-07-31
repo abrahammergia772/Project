@@ -42,13 +42,15 @@ const ProjectsPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["projects","members","departments","clients","tasks"]);
     const user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
     content.innerHTML += `<div id="loadingGrid" class="projects-grid">${Components.skeletonGrid(6)}</div>`;
 
     const regionSelect = document.getElementById("pRegion");
-    [...new Set(MockData.projects.map(p => p.region))].forEach(r => regionSelect.innerHTML += `<option>${r}</option>`);
+    [...new Set(DataStore.projects.map(p => p.region))].forEach(r => regionSelect.innerHTML += `<option>${r}</option>`);
 
     const raw = await API.getProjects();
     allProjects = Roles.visibleProjects(user, raw);
@@ -208,11 +210,11 @@ const ProjectsPage = (() => {
             <datalist id="npTypeList">${["Residential","Commercial","Infrastructure","Industrial","Renovation"].map(t=>`<option value="${t}">`).join("")}</datalist></div>
           <div class="field"><label for="npRegion">Region</label>
             <input class="input" id="npRegion" list="npRegionList" placeholder="Type a region..." autocomplete="off">
-            <datalist id="npRegionList">${[...new Set(MockData.projects.map(p=>p.region))].filter(Boolean).map(r=>`<option value="${Utils.escapeHtml(r)}">`).join("")}</datalist></div>
+            <datalist id="npRegionList">${[...new Set(DataStore.projects.map(p=>p.region))].filter(Boolean).map(r=>`<option value="${Utils.escapeHtml(r)}">`).join("")}</datalist></div>
 
           <div class="field"><label for="npClient">Client <span class="hint-inline">type a new name to create one</span></label>
             <input class="input" id="npClient" list="npClientList" placeholder="Type a client company..." autocomplete="off">
-            <datalist id="npClientList">${MockData.clients.map(c=>`<option value="${Utils.escapeHtml(c.company)}">`).join("")}</datalist>
+            <datalist id="npClientList">${DataStore.clients.map(c=>`<option value="${Utils.escapeHtml(c.company)}">`).join("")}</datalist>
             <div class="field-hint hidden" id="npClientNew"><i class="fa-solid fa-plus"></i> <span></span></div></div>
 
           <div class="two-col">
@@ -229,13 +231,13 @@ const ProjectsPage = (() => {
         <div class="tab-panel hidden" data-panel="dept">
           <div class="field"><label for="npDept">Owning Department <span class="hint-inline">type a new name to create one</span></label>
             <input class="input" id="npDept" list="npDeptList" placeholder="Type a department..." autocomplete="off">
-            <datalist id="npDeptList">${MockData.departments.map(d=>`<option value="${Utils.escapeHtml(d.name)}">`).join("")}</datalist></div>
+            <datalist id="npDeptList">${DataStore.departments.map(d=>`<option value="${Utils.escapeHtml(d.name)}">`).join("")}</datalist></div>
 
           <div class="inline-create hidden" id="npDeptCreate">
             <div class="inline-create-head"><i class="fa-solid fa-building-circle-arrow-right"></i> Create department <b id="npDeptName"></b></div>
             <div class="field"><label for="npDeptHead">Department Head</label>
               <input class="input" id="npDeptHead" list="npHeadList" placeholder="Type a person's name..." autocomplete="off">
-              <datalist id="npHeadList">${MockData.members.filter(m=>m.role!=="Client").map(m=>`<option value="${Utils.escapeHtml(m.full_name)}">`).join("")}</datalist>
+              <datalist id="npHeadList">${DataStore.members.filter(m=>m.role!=="Client").map(m=>`<option value="${Utils.escapeHtml(m.full_name)}">`).join("")}</datalist>
               <div class="field-hint"><i class="fa-solid fa-circle-info"></i> Unknown name? They'll be created as the department's manager.</div></div>
             <div class="two-col">
               <div class="field"><label for="npDeptBudget">Budget (USD)</label><input class="input" type="number" min="0" id="npDeptBudget" placeholder="e.g. 800000"></div>
@@ -285,9 +287,9 @@ const ProjectsPage = (() => {
       if (tab.dataset.tab === "people") renderSummary();
     }));
 
-    const findDept = (name) => MockData.departments.find(d => d.name.toLowerCase() === String(name||"").trim().toLowerCase());
-    const findMember = (name) => MockData.members.find(m => m.full_name.toLowerCase() === String(name||"").trim().toLowerCase());
-    const findClient = (name) => MockData.clients.find(c => c.company.toLowerCase() === String(name||"").trim().toLowerCase());
+    const findDept = (name) => DataStore.departments.find(d => d.name.toLowerCase() === String(name||"").trim().toLowerCase());
+    const findMember = (name) => DataStore.members.find(m => m.full_name.toLowerCase() === String(name||"").trim().toLowerCase());
+    const findClient = (name) => DataStore.clients.find(c => c.company.toLowerCase() === String(name||"").trim().toLowerCase());
 
     // --- Client: flag when the typed name will create a new record
     $("#npClient").addEventListener("input", () => {
@@ -314,7 +316,7 @@ const ProjectsPage = (() => {
     function refreshTeamPicker(deptName) {
       const picker = $("#npTeamPicker");
       if (!deptName) { picker.innerHTML = `<div class="picker-empty">Choose or create a department first.</div>`; return; }
-      const engineers = MockData.members.filter(m => m.department === deptName && m.status === "Active" && m.role !== "Client");
+      const engineers = DataStore.members.filter(m => m.department === deptName && m.status === "Active" && m.role !== "Client");
       picker.innerHTML = engineers.length ? engineers.map(e => `
         <label class="member-pick">
           <input type="checkbox" value="${e.id}">
@@ -324,8 +326,8 @@ const ProjectsPage = (() => {
     }
     function refreshManagerList(deptName) {
       const dept = findDept(deptName);
-      const pool = Roles.eligibleProjectManagers(MockData.members, dept ? dept.name : null);
-      const fallback = pool.length ? pool : Roles.eligibleProjectManagers(MockData.members);
+      const pool = Roles.eligibleProjectManagers(DataStore.members, dept ? dept.name : null);
+      const fallback = pool.length ? pool : Roles.eligibleProjectManagers(DataStore.members);
       $("#npManagerList").innerHTML = [
         ...fallback.map(m => `<option value="${Utils.escapeHtml(m.full_name)}">`),
         ...newEngineers.map(e => `<option value="${Utils.escapeHtml(e.full_name)}">`),
@@ -436,7 +438,7 @@ const ProjectsPage = (() => {
         // 5. Team = existing picks + everyone just created in this department
         const picked = Utils.qsa("#npTeamPicker input:checked", overlay).map(c => c.value);
         const createdIds = newEngineers
-          .map(e => MockData.members.find(m => m.full_name === e.full_name))
+          .map(e => DataStore.members.find(m => m.full_name === e.full_name))
           .filter(Boolean).map(m => m.id);
 
         const project = await API.createProject({
@@ -454,7 +456,7 @@ const ProjectsPage = (() => {
 
         overlay.remove();
         Components.createToast(`${project.title} created — managed by ${project.manager_name}.`, "success");
-        allProjects = Roles.visibleProjects(Auth.getUser(), MockData.projects);
+        allProjects = Roles.visibleProjects(Auth.getUser(), DataStore.projects);
         document.getElementById("projCount").textContent = `(${allProjects.length})`;
         applyFilters();
         if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
@@ -467,10 +469,10 @@ const ProjectsPage = (() => {
 
   // ---------------- Change a project's manager ----------------
   function openChangeManagerModal(projectId) {
-    const project = MockData.getProjectById(projectId);
+    const project = DataStore.getProjectById(projectId);
     if (!project) return;
-    const candidates = Roles.eligibleProjectManagers(MockData.members, project.department);
-    const pool = candidates.length ? candidates : Roles.eligibleProjectManagers(MockData.members);
+    const candidates = Roles.eligibleProjectManagers(DataStore.members, project.department);
+    const pool = candidates.length ? candidates : Roles.eligibleProjectManagers(DataStore.members);
 
     Components.createModal({
       title: `Project manager — ${project.title}`,
@@ -491,7 +493,7 @@ const ProjectsPage = (() => {
         const updated = await API.setProjectManager(projectId, pickedMgr.option.id);
         overlay.remove();
         Components.createToast(`${updated.title} is now managed by ${updated.manager_name}.`, "success");
-        allProjects = Roles.visibleProjects(Auth.getUser(), MockData.projects);
+        allProjects = Roles.visibleProjects(Auth.getUser(), DataStore.projects);
         applyFilters();
         if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
       } catch (err) {

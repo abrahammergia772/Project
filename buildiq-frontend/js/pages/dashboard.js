@@ -9,7 +9,7 @@ const DashboardPage = (() => {
 
   function statCardsFor(user) {
     const role = user.role;
-    const s = MockData.dashboardStats(role);
+    const s = DataStore.stats || {};
     if (role === "Super Admin" || role === "General Manager") {
       return [
         Components.createStatCard("Active Projects", s.active_projects, 8, "accent", "fa-diagram-project", { href: "projects.html?status=In+Progress", hint: "View projects" }),
@@ -18,13 +18,13 @@ const DashboardPage = (() => {
         Components.createStatCard("Open Complaints", s.open_complaints, 3, "yellow", "fa-comments", { href: "complaints.html?status=pending", hint: "Triage now" }),
         role === "Super Admin"
           ? Components.createStatCard("Audit Flags", s.audit_flags, -5, "purple", "fa-shield-halved", { href: "audit.html", hint: "Investigate" })
-          : Components.createStatCard("Departments", MockData.departments.length, null, "cyan", "fa-building", { href: "departments.html", hint: "View departments" }),
+          : Components.createStatCard("Departments", DataStore.departments.length, null, "cyan", "fa-building", { href: "departments.html", hint: "View departments" }),
       ];
     }
     if (role === "Department Manager") {
-      const deptProjects = MockData.projects.filter(p => p.department === user.department);
-      const deptComplaints = MockData.complaints.filter(c => c.department === user.department);
-      const deptMembers = MockData.members.filter(m => m.department === user.department);
+      const deptProjects = DataStore.projects.filter(p => p.department === user.department);
+      const deptComplaints = DataStore.complaints.filter(c => c.department === user.department);
+      const deptMembers = DataStore.members.filter(m => m.department === user.department);
       return [
         Components.createStatCard("Dept. Projects", deptProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
         Components.createStatCard("Team Members", deptMembers.length, null, "blue", "fa-users", { href: "members.html", hint: "View team" }),
@@ -33,10 +33,10 @@ const DashboardPage = (() => {
       ];
     }
     if (role === "Project Manager") {
-      const mine = Roles.managedProjects(user, MockData.projects);
-      const team = Roles.managedTeam(user, MockData.projects);
+      const mine = Roles.managedProjects(user, DataStore.projects);
+      const team = Roles.managedTeam(user, DataStore.projects);
       const ids = new Set(mine.map(p => p.id));
-      const openTasks = MockData.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done");
+      const openTasks = DataStore.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done");
       const overdue = openTasks.filter(t => new Date(t.due_date) < new Date()).length;
       const avgProgress = mine.length ? Math.round(mine.reduce((s, p) => s + p.progress, 0) / mine.length) : 0;
       const spend = mine.reduce((s, p) => s + (p.materials_total_cost || 0), 0);
@@ -50,17 +50,17 @@ const DashboardPage = (() => {
       ];
     }
     if (role === "Engineer") {
-      const myTasks = MockData.tasks.filter(t => t.assignee_id === user.id);
+      const myTasks = DataStore.tasks.filter(t => t.assignee_id === user.id);
       const overdue = myTasks.filter(t => t.status !== "Done" && new Date(t.due_date) < new Date()).length;
       return [
         Components.createStatCard("Open Tasks", myTasks.filter(t=>t.status!=="Done").length, null, "accent", "fa-list-check", { href: "tasks.html", hint: "Open tasks" }),
-        Components.createStatCard("My Projects", Roles.visibleProjects(user, MockData.projects).length, null, "blue", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
+        Components.createStatCard("My Projects", Roles.visibleProjects(user, DataStore.projects).length, null, "blue", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
         Components.createStatCard("Overdue", overdue, null, "red", "fa-clock", { href: "tasks.html", hint: "Catch up" }),
       ];
     }
     if (role === "Client") {
-      const myProjects = Roles.visibleProjects(user, MockData.projects);
-      const myComplaints = Roles.visibleComplaints(user, MockData.complaints);
+      const myProjects = Roles.visibleProjects(user, DataStore.projects);
+      const myComplaints = Roles.visibleComplaints(user, DataStore.complaints);
       return [
         Components.createStatCard("My Projects", myProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
         Components.createStatCard("Avg. Progress", myProjects.length ? Math.round(myProjects.reduce((s,p)=>s+p.progress,0)/myProjects.length) + "%" : "—", null, "blue", "fa-chart-line", { href: "projects.html", hint: "See progress" }),
@@ -170,14 +170,14 @@ const DashboardPage = (() => {
   }
 
   async function fillProjectManager(user) {
-    const mine = Roles.managedProjects(user, MockData.projects);
-    const team = Roles.managedTeam(user, MockData.projects);
+    const mine = Roles.managedProjects(user, DataStore.projects);
+    const team = Roles.managedTeam(user, DataStore.projects);
     const ids = new Set(mine.map(p => p.id));
 
     // AI summary scoped to this PM's portfolio
     const atRisk = mine.filter(p => p.delay_risk === "HIGH");
     const behind = mine.filter(p => p.progress < p.expected_progress);
-    const openComplaints = Roles.visibleComplaints(user, MockData.complaints, MockData.projects)
+    const openComplaints = Roles.visibleComplaints(user, DataStore.complaints, DataStore.projects)
       .filter(c => c.status !== "resolved");
     document.getElementById("execSummary").querySelector("div:nth-child(2)").innerHTML =
       `You manage ${mine.length} project${mine.length === 1 ? "" : "s"} with ${team.length} people. ` +
@@ -223,7 +223,7 @@ const DashboardPage = (() => {
 
       const workload = team.slice(0, 6).map(m => ({
         name: m.full_name.split(" ")[0],
-        count: MockData.tasks.filter(t => t.assignee_id === m.id && t.status !== "Done").length,
+        count: DataStore.tasks.filter(t => t.assignee_id === m.id && t.status !== "Done").length,
       })).sort((a, b) => b.count - a.count);
       charts.push(new Chart(document.getElementById("pmWorkloadChart"), {
         type: "bar",
@@ -235,7 +235,7 @@ const DashboardPage = (() => {
 
     // Urgent tasks across the portfolio
     const urgent = AIEngine.prioritizeTasks(
-      MockData.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done")).slice(0, 5);
+      DataStore.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done")).slice(0, 5);
     document.getElementById("pmTasksList").innerHTML = urgent.length ? urgent.map(t => `
       <a class="dash-row" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
         ${Components.createBadge(t.ai_priority, Utils.priorityBadgeType(t.ai_priority))}
@@ -321,7 +321,11 @@ const DashboardPage = (() => {
       </div>
       <div id="dashBody">${Components.skeletonGrid(4)}</div>`;
 
-    await new Promise(r => setTimeout(r, 300));
+    // Pull the real collections before rendering. Previously these numbers
+    // came from MockData regardless of MOCK_MODE, so a live deployment showed
+    // fabricated counts on every card.
+    await DataStore.load(["stats", "projects", "members", "departments",
+                          "tasks", "complaints", "auditLogs"]);
     chartDefaults();
     const body = document.getElementById("dashBody");
 
@@ -380,17 +384,17 @@ const DashboardPage = (() => {
       </div>`).join("");
     EntityDetail.bindAuto(document.getElementById("activeProjectsList"));
 
-    document.getElementById("activityFeed").innerHTML = MockData.auditLogs.slice(0,6).map(l => `
+    document.getElementById("activityFeed").innerHTML = DataStore.auditLogs.slice(0,6).map(l => `
       <div class="activity-item">
         <div class="activity-icon"><i class="fa-solid fa-circle-info"></i></div>
-        <div><div class="activity-text"><b class="clickable-entity" data-entity="member" data-id="${(MockData.getMemberByName(l.user)||{}).id||''}" style="cursor:pointer;">${Utils.escapeHtml(l.user)}</b> performed ${l.action.replace(/_/g," ").toLowerCase()}</div><div class="activity-time">${Utils.timeAgo(l.timestamp)}</div></div>
+        <div><div class="activity-text"><b class="clickable-entity" data-entity="member" data-id="${(DataStore.getMemberByName(l.user)||{}).id||''}" style="cursor:pointer;">${Utils.escapeHtml(l.user)}</b> performed ${l.action.replace(/_/g," ").toLowerCase()}</div><div class="activity-time">${Utils.timeAgo(l.timestamp)}</div></div>
       </div>`).join("");
     EntityDetail.bindAuto(document.getElementById("activityFeed"));
 
     const deptTable = document.getElementById("deptTable");
     deptTable.innerHTML = `<thead><tr><th>Department</th><th>Head</th><th>Members</th><th>Projects</th><th>AI Health</th></tr></thead>
-      <tbody>${MockData.departments.map(d => {
-        const health = AIEngine.departmentHealth(d, MockData.projects, MockData.members, MockData.complaints);
+      <tbody>${DataStore.departments.map(d => {
+        const health = AIEngine.departmentHealth(d, DataStore.projects, DataStore.members, DataStore.complaints);
         const color = health.score >= 80 ? "green" : health.score >= 60 ? "blue" : health.score >= 40 ? "yellow" : "red";
         return `<tr><td>${d.name}</td><td>${d.head}</td><td>${d.members}</td><td>${d.projects}</td>
         <td style="width:180px;"><div class="flex items-center gap-8">${Components.createProgressBar(health.score, color==="red"?"red":color==="yellow"?"yellow":color==="blue"?"blue":"")}<span style="font-size:11.5px; color:var(--text-muted); white-space:nowrap;">${health.score}</span></div></td></tr>`;
@@ -398,10 +402,10 @@ const DashboardPage = (() => {
   }
 
   async function fillDeptManager(user) {
-    const deptProjects = MockData.projects.filter(p => p.department === user.department);
-    const deptMembers = MockData.members.filter(m => m.department === user.department);
-    const deptComplaints = MockData.complaints.filter(c => c.department === user.department);
-    const health = AIEngine.departmentHealth(MockData.getDepartmentByName(user.department), MockData.projects, MockData.members, MockData.complaints);
+    const deptProjects = DataStore.projects.filter(p => p.department === user.department);
+    const deptMembers = DataStore.members.filter(m => m.department === user.department);
+    const deptComplaints = DataStore.complaints.filter(c => c.department === user.department);
+    const health = AIEngine.departmentHealth(DataStore.getDepartmentByName(user.department), DataStore.projects, DataStore.members, DataStore.complaints);
 
     document.getElementById("execSummary").querySelector("div:nth-child(2)").innerHTML = health.summary;
 
@@ -423,7 +427,7 @@ const DashboardPage = (() => {
   }
 
   async function fillEngineer(user) {
-    const myTasks = AIEngine.prioritizeTasks(MockData.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done")).slice(0,5);
+    const myTasks = AIEngine.prioritizeTasks(DataStore.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done")).slice(0,5);
     document.getElementById("topTasksList").innerHTML = myTasks.length ? myTasks.map(t => `
       <a class="dash-row boxed" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
         <div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:13px;">${Utils.escapeHtml(t.title)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(t.project_title)} · Due ${Utils.formatDate(t.due_date)}</div></div>
@@ -437,8 +441,8 @@ const DashboardPage = (() => {
   }
 
   async function fillClient(user) {
-    const myProjects = Roles.visibleProjects(user, MockData.projects);
-    const myComplaints = Roles.visibleComplaints(user, MockData.complaints);
+    const myProjects = Roles.visibleProjects(user, DataStore.projects);
+    const myComplaints = Roles.visibleComplaints(user, DataStore.complaints);
     const card = document.getElementById("myProjectCard");
     if (!myProjects.length) { card.innerHTML = Components.createEmptyState("fa-diagram-project", "No project linked to your account yet"); }
     else {
@@ -468,7 +472,7 @@ const DashboardPage = (() => {
     document.getElementById("anomalyList").innerHTML = anomalies.slice(0,3).map(Components.createAuditCard).join("");
     EntityDetail.bindAuto(document.getElementById("anomalyList"));
     const buckets = [0,0,0,0,0];
-    MockData.auditLogs.forEach(l => { buckets[Math.min(4, Math.floor(l.anomaly_score*5))]++; });
+    DataStore.auditLogs.forEach(l => { buckets[Math.min(4, Math.floor(l.anomaly_score*5))]++; });
     charts.push(new Chart(document.getElementById("riskDistChart"), {
       type: "bar",
       data: { labels: ["0-20","20-40","40-60","60-80","80-100"], datasets: [{ label: "Logs", data: buckets, backgroundColor: ["#22C55E","#22C55E","#EAB308","#EF4444","#EF4444"], borderRadius: 6 }] },

@@ -243,7 +243,7 @@
               <div class="two-col">
                 <div class="field" data-field="department">
                   <label for="department">Department</label>
-                  <!-- Options are populated at runtime from MockData.departments
+                  <!-- Options are populated at runtime from GET /auth/signup-options
                        so this list can never drift out of sync with the org. -->
                   <input class="input" id="department" list="departmentList" placeholder="Type a department..." autocomplete="off">
                   <datalist id="departmentList"></datalist>
@@ -417,6 +417,9 @@
 <script src="js/config.js"></script>
 <script src="js/utils.js"></script>
 <script src="js/mock-data.js"></script>
+<script src="js/reference-data.js"></script>
+<script src="js/data-store.js"></script>
+<script src="js/app-events.js"></script>
 <script src="js/roles.js"></script>
 <script src="js/ai-engine.js"></script>
 <script src="js/entity-detail.js"></script>
@@ -617,21 +620,37 @@
   // Workforce & Attendance — is always offered at signup.
   const departmentSelect = document.getElementById("department");
   const departmentHint = document.getElementById("departmentHint");
-  document.getElementById("departmentList").innerHTML =
-    MockData.departments.map(d => `<option value="${Utils.escapeHtml(d.name)}">`).join("");
-  // Clients pick from real projects; typed free-text is also accepted.
-  const cpList = document.getElementById("clientProjectList");
-  if (cpList) cpList.innerHTML = MockData.projects.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
-  // Project Managers name the project they run; the same list backs it.
-  const pnList = document.getElementById("projectNameList");
-  if (pnList) pnList.innerHTML = MockData.projects.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
+
+  // Populated from GET /auth/signup-options. Previously these dropdowns were
+  // built from bundled mock data, so they offered departments and projects
+  // that might not exist in this deployment.
+  let SIGNUP_DEPARTMENTS = [];
+  let SIGNUP_PROJECTS = [];
+
+  (async function loadSignupOptions() {
+    try {
+      const opts = await API.getSignupOptions();
+      SIGNUP_DEPARTMENTS = opts.departments || [];
+      SIGNUP_PROJECTS = opts.projects || [];
+    } catch (err) {
+      // The form still works: every field accepts free text, and an admin
+      // assigns the department afterwards.
+      console.error("[BuildIQ] could not load signup options:", err.message);
+    }
+    document.getElementById("departmentList").innerHTML =
+      SIGNUP_DEPARTMENTS.map(d => `<option value="${Utils.escapeHtml(d.name)}">`).join("");
+    const cpList = document.getElementById("clientProjectList");
+    if (cpList) cpList.innerHTML = SIGNUP_PROJECTS.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
+    const pnList = document.getElementById("projectNameList");
+    if (pnList) pnList.innerHTML = SIGNUP_PROJECTS.map(p => `<option value="${Utils.escapeHtml(p.title)}">`).join("");
+  })();
 
   // Joining Workforce & Attendance carries a specific responsibility, so say so.
   const projectNameInput = document.getElementById("projectName");
   const projectNameHint = document.getElementById("projectNameHint");
   ["input", "change"].forEach(ev => projectNameInput.addEventListener(ev, () => {
     const typed = projectNameInput.value.trim();
-    const match = MockData.projects.find(p => p.title.toLowerCase() === typed.toLowerCase());
+    const match = SIGNUP_PROJECTS.find(p => p.title.toLowerCase() === typed.toLowerCase());
     if (match) {
       projectNameHint.innerHTML = `<i class="fa-solid fa-building"></i> Department: <b>${Utils.escapeHtml(match.department || "—")}</b>`;
       projectNameHint.classList.remove("hidden");
@@ -644,7 +663,7 @@
   }));
 
   ["input", "change"].forEach(ev => departmentSelect.addEventListener(ev, () => {
-    const dept = MockData.getDepartmentByName(departmentSelect.value);
+    const dept = SIGNUP_DEPARTMENTS.find(d => (d.name||"").toLowerCase() === departmentSelect.value.trim().toLowerCase());
     if (departmentSelect.value === Roles.WORKFORCE_DEPT) {
       departmentHint.innerHTML = `<i class="fa-solid fa-clipboard-user"></i> Members of this department are responsible for taking daily attendance for all staff and daily workers.`;
       departmentHint.classList.remove("hidden");
@@ -901,7 +920,7 @@
     // A Project Manager names a project, not a department — infer the
     // department from it when the project is one we already know about.
     if (selectedRole === "Project Manager" && typedProject) {
-      const match = MockData.projects.find(p => p.title.toLowerCase() === typedProject.toLowerCase());
+      const match = SIGNUP_PROJECTS.find(p => p.title.toLowerCase() === typedProject.toLowerCase());
       if (match && match.department) typedDept = match.department;
     }
 

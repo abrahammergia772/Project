@@ -8,6 +8,8 @@ const UserManagementPage = (() => {
   let activeTab = "staff";
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["members","clients","projects","departments"]);
     const user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = `
@@ -33,7 +35,7 @@ const UserManagementPage = (() => {
   function render() {
     const el = document.getElementById("umContent");
     if (activeTab === "staff") {
-      const staff = MockData.members;
+      const staff = DataStore.members;
       el.innerHTML = `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>User</th><th>Role</th><th>Department</th><th>Status</th><th>Last Active</th><th>Actions</th></tr></thead>
         <tbody>${staff.map(m => `
@@ -49,11 +51,11 @@ const UserManagementPage = (() => {
           </td>
         </tr>`).join("")}</tbody></table></div>`;
     } else {
-      const clients = MockData.clients;
+      const clients = DataStore.clients;
       el.innerHTML = `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>Company</th><th>Contact</th><th>Email</th><th>Linked Project(s)</th><th>Actions</th></tr></thead>
         <tbody>${clients.map(c => {
-          const projects = MockData.projects.filter(p => p.client_id === c.id);
+          const projects = DataStore.projects.filter(p => p.client_id === c.id);
           return `<tr>
           <td><div class="flex items-center gap-8">${Components.createAvatar(c.company,"sm",c.avatar_color)}<span>${Utils.escapeHtml(c.company)}</span></div></td>
           <td>${Utils.escapeHtml(c.contact_name)}</td>
@@ -66,9 +68,9 @@ const UserManagementPage = (() => {
     Utils.qsa(".suspend-user-btn").forEach(b => b.addEventListener("click", () => {
       Components.createConfirmDialog("This user will lose access to BuildIQ immediately.", () => {
         const actor = Auth.getUser();
-        const target = MockData.getMemberById(b.dataset.id);
+        const target = DataStore.getMemberById(b.dataset.id);
         if (target) target.status = "Inactive";
-        MockData.logAuditEvent(actor, "SUSPEND_USER", `members/${b.dataset.id}`);
+        AppEvents.logAudit(actor, "SUSPEND_USER", `members/${b.dataset.id}`);
         Components.createToast("User suspended.", "success");
         render();
       }, { title: "Suspend user?" });

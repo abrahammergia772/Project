@@ -14,12 +14,12 @@ const ReportsPage = (() => {
     const scopeLocked = Roles.reportScopeLocked(user.role);
     let scopeControl;
     if (user.role === "Client") {
-      const myProjects = Roles.visibleProjects(user, MockData.projects);
+      const myProjects = Roles.visibleProjects(user, DataStore.projects);
       scopeControl = `<input class="input" value="${myProjects[0]?.title || "My Project"}" disabled>`;
     } else if (user.role === "Department Manager") {
       scopeControl = `<input class="input" value="${Utils.escapeHtml(user.department)}" disabled>`;
     } else {
-      scopeControl = Components.createTypedInput({ id: "rScope", value: "Entire Organization", placeholder: "Type a scope...", allowNew: false, options: ["Entire Organization", ...MockData.departments.map(d => d.name)] });
+      scopeControl = Components.createTypedInput({ id: "rScope", value: "Entire Organization", placeholder: "Type a scope...", allowNew: false, options: ["Entire Organization", ...DataStore.departments.map(d => d.name)] });
     }
 
     if (!types.length) {
@@ -63,6 +63,8 @@ const ReportsPage = (() => {
   ];
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["projects","members","departments","complaints"]);
     user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
@@ -112,9 +114,9 @@ const ReportsPage = (() => {
         ${type === "Attendance & Absence Report" ? renderAbsenceRankingTable(result.rankedAbsences) : `
         <h4 style="color:var(--text-primary); margin-bottom:8px;">Key Metrics</h4>
         <div class="grid" style="grid-template-columns:repeat(3,1fr); margin-bottom:16px;">
-          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.projects ?? MockData.projects.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Projects</div></div>
-          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.complaints ?? MockData.complaints.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Complaints</div></div>
-          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.members ?? MockData.members.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Team Members</div></div>
+          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.projects ?? DataStore.projects.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Projects</div></div>
+          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.complaints ?? DataStore.complaints.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Complaints</div></div>
+          <div class="card" style="padding:14px;"><div style="font-size:20px;font-weight:700;">${result.stats?.members ?? DataStore.members.length}</div><div style="font-size:11.5px;color:var(--text-muted);">Team Members</div></div>
         </div>`}
       </div>`;
     EntityDetail.bindAuto(preview);
@@ -193,7 +195,7 @@ const ReportsPage = (() => {
     a.click();
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    MockData.logAuditEvent(user, "EXPORT_DATA", `reports/${slugify(type)}`);
+    AppEvents.logAudit(user, "EXPORT_DATA", `reports/${slugify(type)}`);
     Components.createToast("Report downloaded.", "success");
   }
 
@@ -246,7 +248,7 @@ const ReportsPage = (() => {
     win.document.close();
     win.focus();
     setTimeout(() => win.print(), 300);
-    MockData.logAuditEvent(user, "EXPORT_DATA", `reports/${slugify(type)}/print`);
+    AppEvents.logAudit(user, "EXPORT_DATA", `reports/${slugify(type)}/print`);
   }
 
   function renderAbsenceRankingTable(ranked = []) {

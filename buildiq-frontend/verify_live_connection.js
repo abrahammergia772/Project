@@ -69,10 +69,21 @@ const soft = (n, c, d) => { if (!c) { warn++; warnings.push(n + (d ? `  →  ${d
     "js/ai-engine.js", "js/entity-detail.js", "js/components.js",
     "js/auth.js", "js/api.js"];
   const srcs = [];
+  let allFetched = true;
   for (const f of FILES) {
     const r = await fetch(`${FE}/${f}`);
-    ok(`fetched ${f}`, r.ok, `HTTP ${r.status}`);
+    const good = r.ok;
+    ok(`fetched ${f}`, good, `HTTP ${r.status}` + (r.status === 404
+      ? " — file not deployed yet (push and redeploy the frontend)" : ""));
+    if (!good) { allFetched = false; continue; }
     srcs.push(await r.text());
+  }
+  if (!allFetched) {
+    console.log("\nSTOPPING: the deployed frontend is missing files, so the");
+    console.log("remaining checks would test a stale build. Push and redeploy.");
+    console.log(`\nFAILED — ${fail} of ${pass + fail} checks:`);
+    failures.forEach(x => console.log("  x " + x));
+    process.exit(1);
   }
   const w = new JSDOM("<!doctype html><body>",
     { url: `${FE}/index.html`, runScripts: "dangerously" }).window;

@@ -40,6 +40,8 @@ const ComplaintsPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["complaints","projects","members","departments"]);
     user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
@@ -176,9 +178,9 @@ const ComplaintsPage = (() => {
       await API.resolveComplaint(c.id, note);
       c.status = "resolved";
       c.resolution_note = note;
-      MockData.logAuditEvent(user, "UPDATE_RECORD", `complaints/${c.id}`);
+      AppEvents.logAudit(user, "UPDATE_RECORD", `complaints/${c.id}`);
       // Tell the original submitter their complaint was resolved.
-      MockData.addNotification({
+      AppEvents.notify({
         title: "Your complaint was resolved",
         body: `${c.id} — ${c.category} has been marked resolved.`,
         icon: "fa-circle-check", type: "success", link: "complaints.html",
@@ -195,7 +197,7 @@ const ComplaintsPage = (() => {
     Components.createModal({
       title: "Submit a Complaint",
       bodyHtml: `
-        <div class="field"><label for="cProject">Related Project</label>${Components.createTypedInput({ id: "cProject", placeholder: "Type a project name...", allowNew: false, options: (Roles.visibleProjects(user, MockData.projects).length ? Roles.visibleProjects(user, MockData.projects) : MockData.projects).map(p => ({ id: p.id, label: p.title })) })}</div>
+        <div class="field"><label for="cProject">Related Project</label>${Components.createTypedInput({ id: "cProject", placeholder: "Type a project name...", allowNew: false, options: (Roles.visibleProjects(user, DataStore.projects).length ? Roles.visibleProjects(user, DataStore.projects) : DataStore.projects).map(p => ({ id: p.id, label: p.title })) })}</div>
         <div class="field"><label for="cSeverity">Initial Severity</label>${Components.createTypedInput({ id: "cSeverity", value: "medium", placeholder: "Type a severity...", allowNew: false, options: ["low","medium","high","critical"] })}</div>
         <div class="field"><label>Complaint Details</label><textarea class="input" id="cText" rows="4" placeholder="Describe the issue in detail..."></textarea></div>
         <div class="field"><label>Attachment (optional)</label><input class="input" type="file" id="cFile"></div>
@@ -208,10 +210,10 @@ const ComplaintsPage = (() => {
       if (!text) { Components.createToast("Please describe the issue.", "error"); return; }
       const btn = overlay.querySelector("#submitBtn");
       btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Classifying...`;
-      const projOpts = (Roles.visibleProjects(user, MockData.projects).length ? Roles.visibleProjects(user, MockData.projects) : MockData.projects).map(p => ({ id: p.id, label: p.title }));
+      const projOpts = (Roles.visibleProjects(user, DataStore.projects).length ? Roles.visibleProjects(user, DataStore.projects) : DataStore.projects).map(p => ({ id: p.id, label: p.title }));
       const picked = Components.resolveTypedValue(overlay.querySelector("#cProject"), projOpts);
       const projectId = picked.option ? picked.option.id : null;
-      const project = MockData.projects.find(p => p.id === projectId);
+      const project = DataStore.projects.find(p => p.id === projectId);
       await API.createComplaint({ text, submitted_by: user.id });
       Components.createToast("Complaint submitted and routed by AI.", "success");
       overlay.remove();
@@ -220,10 +222,10 @@ const ComplaintsPage = (() => {
         status: "pending", department: project?.department || "Engineering & Design", project: project?.title || "N/A", text, sentiment: "Neutral",
         ai_summary: "Newly submitted complaint pending AI triage review.", confidence: 82, created_at: new Date().toISOString(), assignee: "Unassigned", resolution_note: "" };
       allComplaints.unshift(newComplaint);
-      MockData.complaints.unshift(newComplaint);
-      MockData.logAuditEvent(user, "UPDATE_RECORD", `complaints/${newComplaint.id}`);
+      DataStore.complaints.unshift(newComplaint);
+      AppEvents.logAudit(user, "UPDATE_RECORD", `complaints/${newComplaint.id}`);
       // Notify whoever is responsible for triaging it.
-      MockData.addNotification({
+      AppEvents.notify({
         title: "New complaint submitted",
         body: `${newComplaint.id} — ${newComplaint.category} on ${newComplaint.project}.`,
         icon: "fa-triangle-exclamation", type: "warning", link: "complaints.html",

@@ -26,6 +26,32 @@ from ..security import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
+
+@router.get("/signup-options")
+def signup_options(db: Session = Depends(get_db)):
+    """Public lists the signup form needs BEFORE anyone has a token.
+
+    /departments and /projects both require authentication, which a new user
+    does not yet have -- so the signup page used to populate these dropdowns
+    from bundled mock data. That listed departments and projects that may not
+    exist in this deployment.
+
+    Only non-sensitive display fields are exposed: names and titles, no
+    budgets, no client details, no staffing.
+    """
+    from ..models import Department, Project
+
+    departments = db.scalars(select(Department).order_by(Department.name)).all()
+    projects = db.scalars(select(Project).order_by(Project.title)).all()
+    return {
+        "departments": [
+            {"name": d.name, "description": d.description} for d in departments
+        ],
+        "projects": [
+            {"title": p.title, "department": p.department} for p in projects
+        ],
+    }
+
 # Roles that are department-scoped; others get a derived department.
 DERIVED_CONTEXT = {
     "Super Admin": ("Executive", "System Administrator"),

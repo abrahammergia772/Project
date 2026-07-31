@@ -23,7 +23,7 @@ const AIInsightsPage = (() => {
   // Which tabs make sense for this role.
   function tabsFor(u) {
     const tabs = [{ key: "overview", label: "Overview", icon: "fa-wand-magic-sparkles" }];
-    if (Roles.visibleProjects(u, MockData.projects).length) {
+    if (Roles.visibleProjects(u, DataStore.projects).length) {
       tabs.push({ key: "predictions", label: "Predictions", icon: "fa-chart-line" });
     }
     if (u.role !== "Client" && u.role !== "Auditor") {
@@ -62,6 +62,8 @@ const AIInsightsPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["projects","members","departments","tasks","complaints","attendance","auditLogs"]);
     user = Auth.getUser();
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
@@ -122,14 +124,14 @@ const AIInsightsPage = (() => {
   //  Overview
   // ============================================================
   function renderOverview(el) {
-    const projects = Roles.visibleProjects(user, MockData.projects);
-    const complaints = Roles.visibleComplaints(user, MockData.complaints, MockData.projects);
+    const projects = Roles.visibleProjects(user, DataStore.projects);
+    const complaints = Roles.visibleComplaints(user, DataStore.complaints, DataStore.projects);
     const openC = complaints.filter(c => c.status !== "resolved");
     const critical = openC.filter(c => c.severity === "critical");
     const highRisk = projects.filter(p => p.delay_risk === "HIGH");
     const behind = projects.filter(p => p.progress < p.expected_progress);
 
-    const myTasks = MockData.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done");
+    const myTasks = DataStore.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done");
     const ranked = AIEngine.prioritizeTasks(myTasks);
     const urgent = ranked.filter(t => t.ai_priority === "CRITICAL" || t.ai_priority === "HIGH");
 
@@ -224,7 +226,7 @@ const AIInsightsPage = (() => {
   //  Predictions
   // ============================================================
   function renderPredictions(el) {
-    const projects = Roles.visibleProjects(user, MockData.projects)
+    const projects = Roles.visibleProjects(user, DataStore.projects)
       .map(p => ({ ...p, gap: p.expected_progress - p.progress }))
       .sort((a, b) => b.gap - a.gap);
 
@@ -319,21 +321,21 @@ const AIInsightsPage = (() => {
   //  Priorities
   // ============================================================
   function renderPriorities(el) {
-    const mine = MockData.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done");
+    const mine = DataStore.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done");
     // Oversight roles rarely hold tasks themselves. Rather than show them an
     // empty tab, fall back to the work they're responsible for.
     let pool = mine;
     let scopeLabel = "your open tasks";
     if (!mine.length && Roles.canViewTeamTasks(user.role)) {
       if (user.role === Roles.PROJECT_MANAGER) {
-        const ids = new Set(Roles.managedProjects(user, MockData.projects).map(p => p.id));
-        pool = MockData.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done");
+        const ids = new Set(Roles.managedProjects(user, DataStore.projects).map(p => p.id));
+        pool = DataStore.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done");
         scopeLabel = "tasks across the projects you manage";
       } else if (Roles.ORG_WIDE.includes(user.role)) {
-        pool = MockData.tasks.filter(t => t.status !== "Done");
+        pool = DataStore.tasks.filter(t => t.status !== "Done");
         scopeLabel = "open tasks across the organization";
       } else {
-        pool = MockData.tasks.filter(t => t.department === user.department && t.status !== "Done");
+        pool = DataStore.tasks.filter(t => t.department === user.department && t.status !== "Done");
         scopeLabel = `open tasks in ${user.department}`;
       }
     }
@@ -398,13 +400,13 @@ const AIInsightsPage = (() => {
   //  Workforce
   // ============================================================
   function renderWorkforce(el) {
-    const attendance = Roles.visibleAttendance(user, MockData.attendance);
+    const attendance = Roles.visibleAttendance(user, DataStore.attendance);
     const ranked = AIEngine.rankAbsences(attendance);
     const flagged = ranked.filter(r => r.ai_risk === "CRITICAL" || r.ai_risk === "HIGH");
 
-    const depts = Roles.visibleDepartments(user, MockData.departments).map(d => ({
+    const depts = Roles.visibleDepartments(user, DataStore.departments).map(d => ({
       dept: d,
-      health: AIEngine.departmentHealth(d, MockData.projects, MockData.members, MockData.complaints),
+      health: AIEngine.departmentHealth(d, DataStore.projects, DataStore.members, DataStore.complaints),
     })).sort((a, b) => a.health.score - b.health.score);
 
     el.innerHTML = `
@@ -455,8 +457,8 @@ const AIInsightsPage = (() => {
   //  Anomalies
   // ============================================================
   function renderAnomalies(el) {
-    const logs = MockData.auditLogs;
-    const types = MockData.AUDIT_TYPE_LIST;
+    const logs = DataStore.auditLogs;
+    const types = ReferenceData.AUDIT_TYPE_LIST;
     const flagged = logs.filter(l => l.is_flagged);
 
     el.innerHTML = `
@@ -495,7 +497,7 @@ const AIInsightsPage = (() => {
                 <span class="ai-task-score" style="--tone:${l.anomaly_score > 0.85 ? "var(--red)" : "var(--accent)"};">${Math.round(l.anomaly_score * 100)}</span>
                 <span class="ai-task-main">
                   <b>${Utils.escapeHtml(l.user)} — ${Utils.escapeHtml(l.action_label || l.action)}</b>
-                  <small>${Utils.escapeHtml(MockData.auditTypeMeta(l.audit_type).label)} · ${Utils.formatDate(l.timestamp)}</small>
+                  <small>${Utils.escapeHtml(ReferenceData.auditTypeMeta(l.audit_type).label)} · ${Utils.formatDate(l.timestamp)}</small>
                   <em><i class="fa-solid fa-sparkles"></i> ${Utils.escapeHtml(l.explanation)}</em>
                 </span>
                 ${Components.createBadge(l.risk_level, Utils.riskBadgeType(l.risk_level))}

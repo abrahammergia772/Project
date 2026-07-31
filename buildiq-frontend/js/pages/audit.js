@@ -9,8 +9,8 @@ const AuditPage = (() => {
   // Active audit-type filter ("ALL" or one of the 7 AUDIT_TYPES keys)
   let typeFilter = "ALL";
 
-  function types() { return MockData.AUDIT_TYPE_LIST; }
-  function typeMeta(key) { return MockData.auditTypeMeta(key); }
+  function types() { return ReferenceData.AUDIT_TYPE_LIST; }
+  function typeMeta(key) { return ReferenceData.auditTypeMeta(key); }
 
   // Logs narrowed to the current audit-type filter
   function filtered() {
@@ -63,6 +63,8 @@ const AuditPage = (() => {
   }
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["auditLogs","members"]);
     const content = document.getElementById("pageContent");
     content.innerHTML = shell();
     document.getElementById("tabContent").innerHTML = Components.skeletonGrid(4);
@@ -210,7 +212,7 @@ const AuditPage = (() => {
       el.innerHTML = `<div class="table-wrap"><table class="data-table">
         <thead><tr><th>User</th><th>Audit Type</th><th>Action</th><th>Resource</th><th>Time</th><th>Risk</th><th>Score</th></tr></thead>
         <tbody>${rows.length ? rows.map(l => {
-          const member = MockData.getMemberByName(l.user);
+          const member = DataStore.getMemberByName(l.user);
           const t = typeMeta(l.audit_type);
           return `<tr>
           <td><div class="flex items-center gap-8 ${member ? 'clickable-entity' : ''}" ${member ? `data-entity="member" data-id="${member.id}"` : ""} style="${member ? 'cursor:pointer;' : ''}">${Components.createAvatar(l.user,"sm")}<span>${Utils.escapeHtml(l.user)}</span></div></td>
@@ -408,7 +410,7 @@ const AuditPage = (() => {
         await API.auditFeedback({ id: btn.dataset.id, action: cls });
         const reviewer = Auth.getUser();
         const AUDIT_ACTIONS = { "suspend-btn": "SUSPEND_USER", "revoke-btn": "PERMISSION_CHANGE", "confirm-threat-btn": "UPDATE_RECORD", "false-alarm-btn": "UPDATE_RECORD" };
-        MockData.logAuditEvent(reviewer, AUDIT_ACTIONS[cls], `audit_logs/${btn.dataset.id}`);
+        AppEvents.logAudit(reviewer, AUDIT_ACTIONS[cls], `audit_logs/${btn.dataset.id}`);
         Components.createToast(`Log entry ${actionMap[cls]}.`, cls === "false-alarm-btn" ? "info" : "success");
         if (cls === "false-alarm-btn" || cls === "confirm-threat-btn") {
           const log = logs.find(l => l.id === btn.dataset.id);

@@ -16,10 +16,10 @@
 const EntityDetail = (() => {
 
   function openMember(id) {
-    const m = MockData.getMemberById(id);
+    const m = DataStore.getMemberById(id);
     if (!m) return;
-    const myTasks = AIEngine.prioritizeTasks(MockData.tasks.filter(t => t.assignee_id === id));
-    const myProjects = MockData.projects.filter(p => p.team.some(t => t.id === id) || p.department === m.department).slice(0, 5);
+    const myTasks = AIEngine.prioritizeTasks(DataStore.tasks.filter(t => t.assignee_id === id));
+    const myProjects = DataStore.projects.filter(p => p.team.some(t => t.id === id) || p.department === m.department).slice(0, 5);
     const drawer = Components.createDrawer({
       side: "right",
       title: m.full_name,
@@ -81,7 +81,7 @@ const EntityDetail = (() => {
   }
 
   function openProject(id) {
-    const p = MockData.getProjectById(id);
+    const p = DataStore.getProjectById(id);
     if (!p) return;
     const user = Auth.getUser();
     const canManage = Roles.canManageMaterials(user, p);
@@ -150,7 +150,7 @@ const EntityDetail = (() => {
         const mat = (p.materials||[]).find(m => m.id === btn.dataset.id);
         Components.createConfirmDialog(`Remove "${mat?.name || "this material"}" from ${p.title}? This cannot be undone.`, async () => {
           await API.deleteMaterial(p.id, btn.dataset.id);
-          MockData.logAuditEvent(Auth.getUser(), "UPDATE_RECORD", `projects/${p.id}/materials/${btn.dataset.id}`);
+          AppEvents.logAudit(Auth.getUser(), "UPDATE_RECORD", `projects/${p.id}/materials/${btn.dataset.id}`);
           Components.createToast("Material removed.", "success");
           renderMaterialsTab(el);
           refreshCostDisplays();
@@ -203,8 +203,8 @@ const EntityDetail = (() => {
   // Shared insert/edit form for a project's purchased materials (#2 — insert + edit place)
   function openMaterialForm(project, existing, onSaved) {
     const isEdit = !!existing;
-    const catalog = MockData.materialCatalog || [];
-    const suppliers = MockData.suppliers || [];
+    const catalog = (window.MockData ? MockData.materialCatalog : []) || [];
+    const suppliers = (window.MockData ? MockData.suppliers : []) || [];
     Components.createModal({
       title: isEdit ? "Edit Material" : "Add Bought Material",
       bodyHtml: `
@@ -256,7 +256,7 @@ const EntityDetail = (() => {
       try {
         if (isEdit) await API.updateMaterial(project.id, existing.id, payload);
         else await API.addMaterial(project.id, payload);
-        MockData.logAuditEvent(
+        AppEvents.logAudit(
           Auth.getUser(), "UPDATE_RECORD",
           `projects/${project.id}/materials${isEdit ? "/" + existing.id : ""}`
         );
@@ -270,9 +270,9 @@ const EntityDetail = (() => {
   }
 
   function openClient(id) {
-    const c = MockData.getClientById(id);
+    const c = DataStore.getClientById(id);
     if (!c) return;
-    const myProjects = MockData.projects.filter(p => p.client_id === id);
+    const myProjects = DataStore.projects.filter(p => p.client_id === id);
     Components.createModal({
       title: c.company,
       bodyHtml: `
@@ -289,10 +289,10 @@ const EntityDetail = (() => {
   }
 
   function openDailyWorker(id) {
-    const w = MockData.getDailyWorkerById(id);
+    const w = DataStore.getDailyWorkerById(id);
     if (!w) return;
-    const records = MockData.attendance.filter(a => a.person_id === id).sort((a,b) => b.date.localeCompare(a.date));
-    const ranked = AIEngine.rankAbsences(MockData.attendance).find(r => r.person_id === id);
+    const records = DataStore.attendance.filter(a => a.person_id === id).sort((a,b) => b.date.localeCompare(a.date));
+    const ranked = AIEngine.rankAbsences(DataStore.attendance).find(r => r.person_id === id);
     Components.createModal({
       title: w.full_name,
       bodyHtml: `

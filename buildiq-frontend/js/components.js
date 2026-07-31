@@ -226,7 +226,7 @@ const Components = (() => {
     const gaugeDeg = Math.round(log.anomaly_score * 360);
     // Which of the 7 audit types this event belongs to (may be absent on legacy rows)
     const auditTypeMeta = (window.MockData && log.audit_type)
-      ? MockData.auditTypeMeta(log.audit_type) : null;
+      ? ReferenceData.auditTypeMeta(log.audit_type) : null;
     return `
       <div class="card audit-card" data-id="${log.id}">
         <div class="flex items-center gap-16">
@@ -238,7 +238,7 @@ const Components = (() => {
             </div>
           </div>
           <div style="flex:1; min-width:0;">
-            <div class="flex items-center gap-8 clickable-entity" data-entity="member" data-id="${(window.MockData && MockData.getMemberByName(log.user) || {}).id || ''}" style="cursor:pointer;">
+            <div class="flex items-center gap-8 clickable-entity" data-entity="member" data-id="${(window.DataStore && DataStore.getMemberByName(log.user) || {}).id || ''}" style="cursor:pointer;">
               ${createAvatar(log.user, "sm")}
               <span style="font-weight:700; font-size:14px;">${escapeHtml(log.user)}</span>
               ${createBadge(log.user_role, roleColor(log.user_role))}

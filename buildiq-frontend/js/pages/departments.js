@@ -10,6 +10,8 @@ const DepartmentsPage = (() => {
   let visibleDepts = [];
 
   async function init() {
+    // Load real server data before rendering.
+    await DataStore.load(["departments","members","projects","complaints"]);
     const user = Auth.getUser();
     const content = document.getElementById("pageContent");
     const canAdd = Roles.ORG_WIDE.includes(user.role);
@@ -20,7 +22,7 @@ const DepartmentsPage = (() => {
       </div>
       <div class="members-grid" id="deptGrid"></div>`;
 
-    visibleDepts = Roles.visibleDepartments(user, MockData.departments);
+    visibleDepts = Roles.visibleDepartments(user, DataStore.departments);
     render(user);
 
     document.getElementById("addDeptBtn")?.addEventListener("click", () => {
@@ -35,7 +37,7 @@ const DepartmentsPage = (() => {
       return;
     }
     grid.innerHTML = visibleDepts.map(d => {
-      const health = AIEngine.departmentHealth(d, MockData.projects, MockData.members, MockData.complaints);
+      const health = AIEngine.departmentHealth(d, DataStore.projects, DataStore.members, DataStore.complaints);
       const healthColor = health.score >= 80 ? "green" : health.score >= 60 ? "blue" : health.score >= 40 ? "yellow" : "red";
       return `
       <div class="card card-hover dept-card" data-id="${d.id}" style="cursor:pointer;">
@@ -47,8 +49,8 @@ const DepartmentsPage = (() => {
           <span class="badge badge-${healthColor}">${health.status}</span>
         </div>
         <div class="grid" style="grid-template-columns:1fr 1fr; text-align:center; padding:10px 0; border-top:1px solid var(--border); margin-bottom:10px;">
-          <div><div style="font-weight:700; font-size:17px;">${d.members ?? MockData.members.filter(m=>m.department===d.name).length}</div><div style="font-size:11px;color:var(--text-muted);">Members</div></div>
-          <div><div style="font-weight:700; font-size:17px;">${d.projects ?? MockData.projects.filter(p=>p.department===d.name).length}</div><div style="font-size:11px;color:var(--text-muted);">Projects</div></div>
+          <div><div style="font-weight:700; font-size:17px;">${d.members ?? DataStore.members.filter(m=>m.department===d.name).length}</div><div style="font-size:11px;color:var(--text-muted);">Members</div></div>
+          <div><div style="font-weight:700; font-size:17px;">${d.projects ?? DataStore.projects.filter(p=>p.department===d.name).length}</div><div style="font-size:11px;color:var(--text-muted);">Projects</div></div>
         </div>
         <div class="flex items-center justify-between" style="font-size:12px; color:var(--text-muted);">
           <span><i class="fa-solid fa-brain" style="color:var(--accent);"></i> AI health score</span><b style="color:var(--text-primary);">${health.score}/100</b>
@@ -145,7 +147,7 @@ const DepartmentsPage = (() => {
 
   // ---------------- Choose a department head (Super Admin / GM) ----------------
   function openHeadModal(detail, user, drawer) {
-    const candidates = Roles.eligibleDepartmentHeads(MockData.members, detail.name);
+    const candidates = Roles.eligibleDepartmentHeads(DataStore.members, detail.name);
     Components.createModal({
       title: `Head of ${detail.name}`,
       bodyHtml: candidates.length ? `
@@ -178,7 +180,7 @@ const DepartmentsPage = (() => {
   // ---------------- Move engineers into a department ----------------
   function openAddEngineersModal(detail, user, drawer) {
     // Anyone not already in this department is a candidate.
-    const candidates = MockData.members.filter(m =>
+    const candidates = DataStore.members.filter(m =>
       m.role !== "Client" && m.department !== detail.name && m.status === "Active");
 
     Components.createModal({
