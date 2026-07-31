@@ -68,10 +68,25 @@ async def lifespan(_: FastAPI):
             "URL (https://<project-ref>.supabase.co), not the REST endpoint.",
             settings.SUPABASE_URL, settings.supabase_base_url,
         )
-    if settings.DATABASE_URL.startswith("sqlite"):
+    if not settings.database_is_persistent:
+        # Deliberately shouty: this silently discards real user accounts, and
+        # "database: connected" in /health makes it look fine.
+        log.warning("=" * 72)
+        log.warning("DATABASE_URL IS NOT SET -- using SQLite at %s", settings.DATABASE_URL)
+        log.warning("Every signup, document and attendance record is DELETED on")
+        log.warning("each deploy, restart and free-tier sleep. Setting SUPABASE_URL")
+        log.warning("does NOT store data in Supabase: that variable only controls")
+        log.warning("file storage. The database needs DATABASE_URL, set to your")
+        log.warning("Supabase Postgres connection string:")
+        log.warning("  postgresql+psycopg://postgres.<ref>:<pw>@aws-0-<region>"
+                    ".pooler.supabase.com:6543/postgres")
+        log.warning("=" * 72)
+    if settings.storage_ready and not settings.database_is_persistent:
         log.warning(
-            "Using SQLite on ephemeral disk -- ALL DATA IS LOST on every deploy "
-            "and restart. Set DATABASE_URL to your Supabase Postgres URI."
+            "SUPABASE_URL is configured but DATABASE_URL is not -- uploaded FILES "
+            "go to Supabase Storage while the rows describing them live in a "
+            "throwaway SQLite file. After a restart the files exist but nothing "
+            "references them."
         )
 
     # Create tables. For real migrations use Alembic; this keeps first-run simple.
@@ -170,6 +185,9 @@ def health():
         "version": settings.APP_VERSION,
         "env": settings.ENV,
         "database": "connected" if db_ok else "unreachable",
+        # Which database, not just whether it answered. See database_kind.
+        "database_backend": settings.database_kind,
+        "data_persistent": settings.database_is_persistent,
         "ai": "groq" if groq_service.is_available() else "heuristic",
         "storage": storage.backend_name(),
     }

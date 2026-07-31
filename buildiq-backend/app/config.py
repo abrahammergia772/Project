@@ -90,6 +90,27 @@ class Settings(BaseSettings):
         return bool(self.AI_ENABLED and self.GROQ_API_KEY)
 
     @property
+    def database_kind(self) -> str:
+        """Human-readable database backend, for /health and startup logs.
+
+        "connected" alone is misleading: SQLite connects perfectly well, so a
+        deployment that silently fell back to an ephemeral file looks healthy
+        while discarding every signup on the next restart.
+        """
+        url = self.DATABASE_URL.lower()
+        if url.startswith("sqlite"):
+            return "sqlite (EPHEMERAL — data is lost on restart)"
+        if "supabase" in url or "pooler.supabase.com" in url:
+            return "postgres (supabase)"
+        if url.startswith(("postgresql", "postgres")):
+            return "postgres"
+        return "unknown"
+
+    @property
+    def database_is_persistent(self) -> bool:
+        return not self.DATABASE_URL.lower().startswith("sqlite")
+
+    @property
     def supabase_base_url(self) -> str:
         """SUPABASE_URL reduced to the bare project origin.
 
