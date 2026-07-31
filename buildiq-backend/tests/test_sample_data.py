@@ -156,8 +156,36 @@ def _sqlite_from_schema():
                 + (" DEFAULT ''" if df else "")
                 + (" PRIMARY KEY" if (pk or el.colname == "id") else "")
             )
+        # Carry the table-level CHECK constraints across too. Without them the
+        # simulation silently accepted 'HIGH' for complaints.severity, which
+        # the real database rejects (ck_complaints_severity is lowercase).
+        for col, allowed in _enum_checks().get(stmt.relation.relname, {}).items():
+            quoted = ", ".join("'" + v + "'" for v in allowed)
+            cols.append(f'CHECK ("{col}" IS NULL OR "{col}" = \'\' '
+                        f'OR "{col}" IN ({quoted}))')
         ddl.append(f'CREATE TABLE "{stmt.relation.relname}" ({", ".join(cols)});')
     return "\n".join(ddl)
+
+
+def _enum_checks():
+    """{table: {column: [allowed, ...]}} from every `check (col in (...))`.
+
+    Parsed from the DDL text because pglast represents these as expression
+    trees that are far more awkward to walk than the source.
+    """
+    out = {}
+    for m in re.finditer(
+            r"create table[^(]*?\b(?:public\.)?(\w+)\s*\((.*?)\n\);",
+            SCHEMA, re.S | re.I):
+        table, body = m.group(1), m.group(2)
+        found = {}
+        for c in re.finditer(r"check\s*\(\s*(\w+)\s+in\s*\(([^)]*)\)",
+                             body, re.S | re.I):
+            found[c.group(1)] = [v.strip().strip("'")
+                                 for v in c.group(2).split(",") if v.strip()]
+        if found:
+            out[table] = found
+    return out
 
 
 def _to_sqlite(sql: str) -> str:
@@ -262,3 +290,48 @@ def test_uses_no_postgres_only_syntax_we_cannot_verify():
     """generate_series is valid PG but unrunnable here, so it hid a whole
     INSERT from the execution test. Keep the sample fully verifiable."""
     assert "generate_series" not in SAMPLE
+
+
+def test_no_value_violates_a_check_constraint():
+    """Enum columns must use the exact casing the schema demands.
+
+    Reported failure:
+        ERROR 23514: new row for relation "complaints" violates check
+        constraint "ck_complaints_severity"
+
+    complaints.severity is lowercase, while projects.delay_risk and
+    audit_logs.risk_level are uppercase. The casing is NOT consistent across
+    tables, so every enum value is checked against its own constraint.
+    """
+    enums = _enum_checks()
+    violations = []
+    for raw in pglast.parse_sql(SAMPLE):
+        stmt = raw.stmt
+        if type(stmt).__name__ != "InsertStmt":
+            continue
+        table = stmt.relation.relname
+        cols = [c.name for c in (stmt.cols or [])]
+        sel = stmt.selectStmt
+        if type(sel).__name__ != "SelectStmt" or not sel.valuesLists:
+            continue
+        for row_no, row in enumerate(sel.valuesLists, start=1):
+            for i, node in enumerate(row):
+                if i >= len(cols) or type(node).__name__ != "A_Const":
+                    continue
+                if getattr(node, "isnull", False):
+                    continue
+                val = getattr(node.val, "sval", None)
+                allowed = enums.get(table, {}).get(cols[i])
+                if val is not None and allowed and val not in allowed:
+                    violations.append(
+                        f"{table}.{cols[i]} row {row_no}: "
+                        f"{val!r} not in {allowed}")
+    assert not violations, "CHECK constraint violations:\n  " + "\n  ".join(violations)
+
+
+def test_enum_casing_differs_between_tables_and_is_respected():
+    """Guards the specific trap: severity lower, risk levels upper."""
+    enums = _enum_checks()
+    assert enums["complaints"]["severity"] == ["low", "medium", "high", "critical"]
+    assert enums["projects"]["delay_risk"] == ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+    assert "'HIGH'" not in SAMPLE.split("insert into public.complaints")[1].split(";")[0]

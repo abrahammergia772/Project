@@ -146,20 +146,23 @@ on conflict (id) do update set
   status = excluded.status, blocking = excluded.blocking, due_date = excluded.due_date;
 
 -- ------------------------------------------------------------------ complaints
+-- NOTE: complaints.severity is LOWERCASE ('low','medium','high','critical'),
+-- unlike projects.delay_risk and audit_logs.risk_level which are UPPERCASE.
+-- The check constraints differ per table -- see ck_complaints_severity.
 insert into public.complaints
   (id, category, text, severity, status, department, project,
    customer_name, submitted_by, created_at)
 values
   ('cmp_1','Project Delay','Steel delivery is three weeks late, blocking the frame.',
-   'HIGH','pending','Procurement','Highland Logistics Hub','Sara Girma','mem_cl_1', now() - interval '4 days'),
+   'high','pending','Procurement','Highland Logistics Hub','Sara Girma','mem_cl_1', now() - interval '4 days'),
   ('cmp_2','Quality Issue','Visible honeycombing on the level 3 columns.',
-   'MEDIUM','in_progress','Quality Control','Sodo Tower Complex','Abebe Kebede','mem_cl_1', now() - interval '9 days'),
+   'medium','in_progress','Quality Control','Sodo Tower Complex','Abebe Kebede','mem_cl_1', now() - interval '9 days'),
   ('cmp_3','Safety Concern','Scaffolding on the east face is missing guard rails.',
-   'HIGH','pending','Site Operations','Sodo Tower Complex','Abebe Kebede','mem_cl_1', now() - interval '2 days'),
+   'high','pending','Site Operations','Sodo Tower Complex','Abebe Kebede','mem_cl_1', now() - interval '2 days'),
   ('cmp_4','Billing Dispute','Invoice 2026-114 double-charges for formwork.',
-   'MEDIUM','resolved','Finance','Sunrise Business Center','Daniel Bekele','mem_cl_1', now() - interval '21 days'),
+   'medium','resolved','Finance','Sunrise Business Center','Daniel Bekele','mem_cl_1', now() - interval '21 days'),
   ('cmp_5','Communication','No weekly progress report for two consecutive weeks.',
-   'LOW','pending','Client Relations','Adama Industrial Park','Sara Girma','mem_cl_1', now() - interval '6 days')
+   'low','pending','Client Relations','Adama Industrial Park','Sara Girma','mem_cl_1', now() - interval '6 days')
 on conflict (id) do update set
   status = excluded.status, severity = excluded.severity;
 
