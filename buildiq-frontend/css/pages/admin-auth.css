@@ -94,6 +94,9 @@
 /* ---------- Which roles belong here ---------- */
 .admin-role-strip {
   display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px;
+  /* Centre the tags so a wrapped row (common on narrow phones, where all
+     three can't sit on one line) still looks deliberate rather than ragged. */
+  justify-content: center;
 }
 .admin-role-strip span {
   display: inline-flex; align-items: center; gap: 6px;
@@ -183,8 +186,21 @@
 
 /* ---------- Small screens ---------- */
 @media (max-width: 480px) {
-  .admin-auth-card { padding: 24px 20px 22px; border-radius: 14px; }
+  /* Reclaim horizontal room: at 360px the old 32px side padding left only
+     260px of usable width, which the three role tags (~332px) overflowed,
+     stacking them one per line and stretching the card. */
+  .admin-auth-card { padding: 22px 16px 20px; border-radius: 14px; }
+  .admin-auth-body { padding: 20px 12px; }
   .admin-brand img { width: 34px; height: 34px; }
   .admin-brand-name { font-size: 18px; }
-  .admin-role-strip span { font-size: 11px; }
+  .admin-role-strip { gap: 6px; }
+  .admin-role-strip span { font-size: 10.5px; padding: 4px 8px; gap: 5px; }
+  .admin-intro { font-size: 12.2px; }
+}
+
+/* Very narrow phones: drop the labels to icons only, so the three roles stay
+   on a single line instead of consuming three rows of vertical space. */
+@media (max-width: 340px) {
+  .admin-role-strip span { font-size: 0; padding: 6px 9px; gap: 0; }
+  .admin-role-strip i { font-size: 12px; }
 }
