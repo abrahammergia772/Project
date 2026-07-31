@@ -209,6 +209,28 @@ After saving, Render redeploys. Re-check `/health` — it should read
 
 ---
 
+## Checking the two deployed services are talking
+
+```bash
+node buildiq-frontend/verify_live_connection.js
+```
+
+It downloads the frontend's own JavaScript from the live site and runs it
+against the live API, so it exercises what a browser actually executes rather
+than a local copy. It covers reachability, the API_BASE wiring, the CORS
+preflight, sign-in for all six roles, every authenticated endpoint, and that a
+wrong password is still refused. Production-posture issues are reported as
+warnings so they don't mask a genuine connection failure.
+
+Override the targets with environment variables:
+
+```bash
+FE=https://your-frontend.onrender.com BE=https://your-api.onrender.com \
+  node buildiq-frontend/verify_live_connection.js
+```
+
+---
+
 ## Verify
 
 ```bash
