@@ -1,33 +1,9 @@
-# Render deployment config for BuildIQ frontend (static site)
-# Deploy type: Static Site — no server process, no start command needed.
+# Superseded — see ../render.yaml at the REPO ROOT.
 #
-# IMPORTANT — this file lives inside the buildiq-frontend/ folder, and in the
-# GitHub repo that folder is *not* the repo root (the repo root only contains
-# the buildiq-frontend/ directory). Render Blueprints look for render.yaml at
-# the repo root by default, so you have two options:
+# Render only reads render.yaml from the repository root, so the Blueprint for
+# BOTH services lives there and sets `rootDir` per service. Keeping a second
+# copy here caused confusion (and a failed deploy: the build ran from the repo
+# root, where requirements.txt does not exist).
 #
-#   Option A (recommended, simplest) — Skip Blueprints entirely:
-#     1. On Render: New -> Static Site -> connect this repo.
-#     2. Set "Root Directory" to: buildiq-frontend
-#     3. Build Command: (leave empty)
-#     4. Publish Directory: . (a single dot — relative to Root Directory above)
-#     This ignores render.yaml entirely and just serves the folder directly.
-#
-#   Option B — Use this Blueprint file:
-#     1. On Render: New -> Blueprint -> connect this repo.
-#     2. When prompted, set the Blueprint's "Root Directory" to: buildiq-frontend
-#        (so Render finds this render.yaml and resolves staticPublishPath
-#        relative to that folder, not the outer repo root).
-
-services:
-  - type: web
-    name: buildiq-frontend
-    runtime: static
-    buildCommand: ""            # no build step — plain HTML/CSS/JS
-    staticPublishPath: .        # relative to this file's folder (buildiq-frontend/)
-    # Multi-page app (not a SPA) — each .html file is served directly by
-    # filename, so no rewrite/fallback rule is needed here.
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: public, max-age=0, must-revalidate
+# To deploy: New -> Blueprint -> pick this repo. Render finds /render.yaml and
+# creates buildiq-api and buildiq-frontend together.

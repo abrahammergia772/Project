@@ -1,0 +1,54 @@
+# ============================================================
+# BuildIQ — Render Blueprint (repo root)
+#
+# This repo holds TWO deployables in subfolders:
+#   buildiq-backend/   FastAPI service
+#   buildiq-frontend/  static site
+#
+# Render looks for render.yaml at the REPO ROOT, which is why this file
+# lives here rather than inside the service folders. Each service sets its
+# own `rootDir`, so build commands resolve relative to that folder --
+# `pip install -r requirements.txt` finds buildiq-backend/requirements.txt.
+# ============================================================
+services:
+  # ---------------- API ----------------
+  - type: web
+    name: buildiq-api
+    runtime: python
+    rootDir: buildiq-backend          # <-- makes requirements.txt resolvable
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: ENV
+        value: production
+      # Pinned: several dependencies had no cp314 wheels at time of writing,
+      # so Render's default (3.14.x) forces a source build that fails.
+      - key: PYTHON_VERSION
+        value: "3.13.4"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SEED_ON_STARTUP
+        value: "true"
+
+  # ---------------- Frontend ----------------
+  - type: web
+    name: buildiq-frontend
+    runtime: static
+    rootDir: buildiq-frontend
+    buildCommand: ""                  # plain HTML/CSS/JS, no build step
+    staticPublishPath: .
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: public, max-age=0, must-revalidate
