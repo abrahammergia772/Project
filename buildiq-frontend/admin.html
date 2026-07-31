@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuildIQ — Administrator Portal</title>
+<meta name="description" content="Restricted access — BuildIQ administration">
+
+<!-- Unlisted entrance: keep it out of search results entirely. -->
+<meta name="robots" content="noindex, nofollow, noarchive">
+<meta name="referrer" content="no-referrer">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<link rel="stylesheet" href="css/reset.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/pages/auth.css">
+<link rel="stylesheet" href="css/pages/admin-auth.css">
+
+<script>
+  // The administrator portal is always dark — it is a deliberately distinct,
+  // high-contrast "operations console" look, so it does NOT follow the
+  // buildiq_theme preference the public page writes.
+  document.documentElement.removeAttribute("data-theme");
+</script>
+</head>
+<body class="admin-auth-body">
+
+<div class="admin-grid-bg" aria-hidden="true"></div>
+<div class="admin-glow" aria-hidden="true"></div>
+
+<main class="admin-auth-shell">
+  <div class="admin-auth-card">
+
+    <div class="admin-badge-row">
+      <span class="admin-restricted-badge">
+        <i class="fa-solid fa-shield-halved"></i> Restricted Access
+      </span>
+    </div>
+
+    <div class="admin-brand">
+      <img src="assets/logo.svg" alt="BuildIQ logo">
+      <div>
+        <div class="admin-brand-name">BuildIQ</div>
+        <div class="admin-brand-sub">Administrator Portal</div>
+      </div>
+    </div>
+
+    <p class="admin-intro">
+      This entrance is for organization oversight accounts only.
+      All sign-in attempts are recorded.
+    </p>
+
+    <!-- Which roles belong here -->
+    <div class="admin-role-strip">
+      <span><i class="fa-solid fa-user-shield"></i> Super Admin</span>
+      <span><i class="fa-solid fa-user-tie"></i> General Manager</span>
+      <span><i class="fa-solid fa-magnifying-glass-chart"></i> Auditor</span>
+    </div>
+
+    <form id="adminLoginForm" novalidate>
+      <div class="field">
+        <label for="adminEmail">Administrator email</label>
+        <div class="input-wrap">
+          <i class="fa-solid fa-envelope"></i>
+          <input class="input" type="email" id="adminEmail" placeholder="you@buildiq.et"
+                 autocomplete="username" required>
+        </div>
+      </div>
+
+      <div class="field">
+        <label for="adminPassword">Password</label>
+        <div class="input-wrap has-toggle">
+          <i class="fa-solid fa-lock"></i>
+          <input class="input" type="password" id="adminPassword" placeholder="••••••••"
+                 autocomplete="current-password" required>
+          <button type="button" class="input-toggle" id="toggleAdminPw" aria-label="Show password">
+            <i class="fa-solid fa-eye"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-error hidden" id="adminError">
+        <i class="fa-solid fa-circle-exclamation"></i>
+        <span id="adminErrorText">Those credentials were not recognised.</span>
+      </div>
+
+      <button type="submit" class="btn btn-block admin-submit" id="adminSubmitBtn">
+        <span>Secure Sign In</span> <i class="fa-solid fa-arrow-right-to-bracket"></i>
+      </button>
+
+      <a href="#" class="forgot-link admin-forgot" id="adminForgot">Forgot password?</a>
+    </form>
+
+    <div class="admin-divider">or use a demo account</div>
+
+    <div class="role-chips admin-chips">
+      <!-- Explicit emails, not derived from the role name: these are the
+           accounts that actually exist in the seeded backend, so the chips
+           work against a real server as well as in mock mode. -->
+      <button type="button" class="role-chip" data-role="Super Admin" data-email="admin@buildiq.et">Super Admin</button>
+      <button type="button" class="role-chip" data-role="General Manager" data-email="gm@buildiq.et">General Manager</button>
+      <button type="button" class="role-chip" data-role="Auditor" data-email="auditor@buildiq.et">Auditor</button>
+    </div>
+
+    <div class="admin-foot">
+      <i class="fa-solid fa-lock"></i>
+      Not an administrator? <a href="index.html">Return to staff sign-in</a>
+    </div>
+
+  </div>
+</main>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/roles.js"></script>
+<script src="js/ai-engine.js"></script>
+<script src="js/entity-detail.js"></script>
+<script src="js/components.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function () {
+
+  const errBox = document.getElementById("adminError");
+  const errText = document.getElementById("adminErrorText");
+
+  function showError(msg) {
+    errText.textContent = msg;
+    errBox.classList.remove("hidden");
+  }
+  function clearError() { errBox.classList.add("hidden"); }
+
+  // ---------------- Handoff from the public login page ----------------
+  // A privileged user who signed in on index.html gets bounced here with an
+  // already-valid session. Honour it instead of asking them to type the same
+  // password twice -- but only if the stored session really is privileged.
+  const isHandoff = new URLSearchParams(location.search).get("handoff") === "1";
+
+  if (Auth.isLoggedIn()) {
+    const u = Auth.getUser();
+    if (u && Roles.usesPrivilegedLogin(u.role)) {
+      Components.createToast(`Verified as ${u.role}. Opening console...`, "success");
+      setTimeout(() => window.location.href = "dashboard.html", 500);
+      return;
+    }
+    // A non-privileged session must never be silently upgraded by URL.
+    if (isHandoff) Auth.logout({ silent: true });
+    else { window.location.href = "dashboard.html"; return; }
+  }
+
+  if (isHandoff) {
+    showError("Your session expired during redirect. Please sign in again.");
+  }
+
+  // ---------------- Password visibility ----------------
+  const pwBtn = document.getElementById("toggleAdminPw");
+  const pwInput = document.getElementById("adminPassword");
+  pwBtn.addEventListener("click", () => {
+    const masked = pwInput.type === "password";
+    pwInput.type = masked ? "text" : "password";
+    pwBtn.querySelector("i").className = `fa-solid ${masked ? "fa-eye-slash" : "fa-eye"}`;
+    pwBtn.setAttribute("aria-label", masked ? "Hide password" : "Show password");
+  });
+
+  // ---------------- Shared sign-in path ----------------
+  // Used by both the form and the demo chips so the gate can't be bypassed by
+  // taking a different route in.
+  async function attemptSignIn(email, password, btn, restoreHtml) {
+    clearError();
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Verifying...`;
+    }
+    try {
+      const user = await Auth.login(email, password, "admin");
+
+      // Credentials were valid, but this door is not for them. Drop the
+      // session immediately -- do not leave a usable token behind -- and send
+      // them to the page they should be using.
+      if (!Roles.usesPrivilegedLogin(user.role)) {
+        Auth.logout({ silent: true });
+        showError("This portal is for administrator accounts only. Redirecting you to staff sign-in...");
+        if (btn) { btn.disabled = false; btn.innerHTML = restoreHtml; }
+        setTimeout(() => window.location.href = "index.html", 1600);
+        return;
+      }
+
+      if (window.MockData && MockData.logAuditEvent) {
+        MockData.logAuditEvent({
+          action: "ADMIN_PORTAL_LOGIN",
+          entity: "auth",
+          details: `${user.role} signed in via the administrator portal`,
+          user_id: user.id,
+        });
+      }
+
+      Components.createToast(`Welcome, ${user.name}.`, "success");
+      setTimeout(() => window.location.href = "dashboard.html", 500);
+    } catch (err) {
+      if (btn) { btn.disabled = false; btn.innerHTML = restoreHtml; }
+      // Deliberately vague: never reveal whether the address exists.
+      showError("Those credentials were not recognised.");
+    }
+  }
+
+  const SUBMIT_HTML = `<span>Secure Sign In</span> <i class="fa-solid fa-arrow-right-to-bracket"></i>`;
+
+  document.getElementById("adminLoginForm").addEventListener("submit", (e) => {
+    e.preventDefault();
+    const email = document.getElementById("adminEmail").value.trim();
+    const password = pwInput.value;
+    if (!email || !password) { showError("Enter both your email and password."); return; }
+    attemptSignIn(email, password, document.getElementById("adminSubmitBtn"), SUBMIT_HTML);
+  });
+
+  // ---------------- Demo chips ----------------
+  document.querySelectorAll(".admin-chips .role-chip").forEach(chip => {
+    chip.addEventListener("click", () => {
+      const email = chip.dataset.email;
+      document.getElementById("adminEmail").value = email;
+      pwInput.value = "Demo1234!";
+      attemptSignIn(email, "Demo1234!", document.getElementById("adminSubmitBtn"), SUBMIT_HTML);
+    });
+  });
+
+  // Password reset lives on the public page; carry the address across.
+  document.getElementById("adminForgot").addEventListener("click", (e) => {
+    e.preventDefault();
+    const email = document.getElementById("adminEmail").value.trim();
+    window.location.href = "index.html?forgot=1" + (email ? `&email=${encodeURIComponent(email)}` : "");
+  });
+
+})();
+</script>
+
+</body>
+</html>
