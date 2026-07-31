@@ -3,8 +3,22 @@
    Floating assistant: launcher button + slide-up chat panel.
    ============================================================ */
 
+/* The assistant's root must never gain a transform, filter or perspective:
+   any of those would make it a containing block for its fixed children and
+   the panel would scroll with the page. */
+#aiAssistantRoot {
+  position: static;
+  transform: none;
+  filter: none;
+  perspective: none;
+  contain: none;
+}
+
 /* ---------- Launcher ---------- */
 .ai-fab {
+  /* Fixed to the viewport so it stays put while the page scrolls. The root
+     container is appended straight to <body> and has no transformed ancestor,
+     which would otherwise turn this into a containing block and break it. */
   position: fixed;
   right: 22px;
   bottom: 22px;
@@ -13,7 +27,10 @@
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  z-index: 420;
+  /* Above the sidebar (100), topbar (90) and notification dropdown (300),
+     but below drawers (190/191), modals (200) and toasts (400+) so a dialog
+     is never covered by the assistant. */
+  z-index: 150;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -52,7 +69,8 @@
   max-width: calc(100vw - 32px);
   height: 560px;
   max-height: calc(100vh - 140px);
-  z-index: 430;
+  max-height: calc(100dvh - 140px);   /* dvh tracks mobile browser chrome */
+  z-index: 151;                        /* one above the launcher, same band */
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -159,7 +177,9 @@
   .ai-fab { right: 16px; bottom: 74px; width: 50px; height: 50px; font-size: 19px; }
   .ai-panel {
     right: 10px; left: 10px; bottom: 10px; width: auto;
-    height: calc(100vh - 90px); max-height: none;
+    height: calc(100vh - 90px);
+    height: calc(100dvh - 90px);
+    max-height: none;
   }
 }
 
