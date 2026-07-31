@@ -40,6 +40,11 @@ async def lifespan(_: FastAPI):
             "Set a strong SECRET_KEY before running in production."
         )
 
+    # Fail fast on a database that cannot persist data. Previously a missing
+    # DATABASE_URL silently fell back to SQLite and the service came up
+    # "healthy" while discarding every signup on the next restart.
+    settings.validate_database()
+
     log.info("Starting %s v%s (env=%s)", settings.APP_NAME, settings.APP_VERSION, settings.ENV)
     log.info("Database: %s", settings.DATABASE_URL.split("@")[-1] or "sqlite")
     log.info("AI: %s", f"Groq ({settings.GROQ_MODEL})" if groq_service.is_available()
@@ -62,6 +67,16 @@ async def lifespan(_: FastAPI):
             "Set ENV=production on any publicly reachable deployment.",
             settings.ENV,
         )
+    if settings.supabase_url_had_service_path:
+        log.warning(
+            "SUPABASE_URL was %r -- trimmed to %s. Set it to the bare project "
+            "URL (https://<project-ref>.supabase.co), not the REST endpoint.",
+            settings.SUPABASE_URL, settings.supabase_base_url,
+        )
+    if not settings.database_is_persistent:
+        # Only reachable with ALLOW_SQLITE=true, i.e. the test suite.
+        log.warning("Running on SQLite (ALLOW_SQLITE=true). Test use only.")
+
     if settings.supabase_url_had_service_path:
         log.warning(
             "SUPABASE_URL was %r -- trimmed to %s. Set it to the bare project "

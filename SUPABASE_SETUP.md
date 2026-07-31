@@ -1,3 +1,10 @@
+# Supabase-only setup
+
+> **The API now refuses to start without `DATABASE_URL`.** There is no SQLite
+> fallback. If the variable is missing the deploy fails with an explicit
+> message in the Render log rather than coming up "healthy" while throwing
+> away every signup.
+
 # Why your users and files aren't in Supabase
 
 ## Short answer

@@ -34,6 +34,9 @@ services:
       - key: SECRET_KEY
         generateValue: true
       # Set these in the dashboard — never commit them.
+      # REQUIRED. The service refuses to start without it -- there is no
+      # SQLite fallback, because that silently discarded data on every restart.
+      #   postgresql+psycopg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres
       - key: DATABASE_URL
         sync: false
       # MUST be the exact frontend origin, e.g.

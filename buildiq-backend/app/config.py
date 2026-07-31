@@ -29,7 +29,15 @@ class Settings(BaseSettings):
     # Use the pooled (pgbouncer, port 6543) URI for serverless deployments.
     # Example:
     #   postgresql+psycopg://postgres.<ref>:<pw>@aws-0-eu-west-1.pooler.supabase.com:6543/postgres
-    DATABASE_URL: str = "sqlite:///./buildiq.db"
+    # No default. This project stores its data in Supabase Postgres only, so a
+    # missing DATABASE_URL must be a hard startup failure rather than a silent
+    # fallback to a local file -- that fallback quietly discarded every real
+    # signup on each Render restart, while /health still read "connected".
+    DATABASE_URL: str = ""
+
+    # Tests run against a throwaway SQLite file. Set ALLOW_SQLITE=true there
+    # (tests/conftest.py does it automatically). Never set it in deployment.
+    ALLOW_SQLITE: bool = False
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 10
     DB_ECHO: bool = False
@@ -88,6 +96,50 @@ class Settings(BaseSettings):
     @property
     def groq_ready(self) -> bool:
         return bool(self.AI_ENABLED and self.GROQ_API_KEY)
+
+    def validate_database(self) -> None:
+        """Refuse to run on anything but Supabase Postgres.
+
+        Raises with an actionable message instead of starting up in a state
+        where data is silently thrown away.
+        """
+        url = (self.DATABASE_URL or "").strip()
+
+        if not url:
+            raise RuntimeError(
+                "DATABASE_URL is not set.\n\n"
+                "This application stores its data in Supabase Postgres. Set\n"
+                "DATABASE_URL in your Render dashboard (Environment tab):\n\n"
+                "  postgresql+psycopg://postgres.<project-ref>:<password>"
+                "@aws-0-<region>.pooler.supabase.com:6543/postgres\n\n"
+                "Note: SUPABASE_URL is for file storage only and does not\n"
+                "configure the database."
+            )
+
+        if url.lower().startswith("sqlite"):
+            if self.ALLOW_SQLITE:
+                return
+            raise RuntimeError(
+                "DATABASE_URL points at SQLite, which is not supported.\n\n"
+                "On Render this is an ephemeral file: every signup is deleted\n"
+                "on each deploy, restart and free-tier sleep. Use the Supabase\n"
+                "Postgres connection string instead."
+            )
+
+        if not url.lower().startswith(("postgresql://", "postgresql+psycopg://",
+                                       "postgres://")):
+            raise RuntimeError(
+                f"DATABASE_URL is not a PostgreSQL URL: {url.split('://')[0]}://\n"
+                "Expected postgresql+psycopg://..."
+            )
+
+        if url.lower().startswith(("postgresql://", "postgres://")):
+            raise RuntimeError(
+                "DATABASE_URL is missing the psycopg driver.\n\n"
+                "Change the scheme to postgresql+psycopg:// -- this project\n"
+                "uses psycopg 3, and SQLAlchemy will otherwise look for\n"
+                "psycopg2, which is not installed."
+            )
 
     @property
     def database_kind(self) -> str:

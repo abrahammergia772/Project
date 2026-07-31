@@ -14,6 +14,11 @@ from .config import settings
 
 log = logging.getLogger("buildiq.db")
 
+# Validate BEFORE create_engine(). The engine is built at import time, so an
+# empty or malformed DATABASE_URL would otherwise surface as an opaque
+# SQLAlchemy ArgumentError traceback instead of the actionable message below.
+settings.validate_database()
+
 _is_sqlite = settings.DATABASE_URL.startswith("sqlite")
 
 if _is_sqlite:

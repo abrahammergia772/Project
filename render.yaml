@@ -28,6 +28,9 @@ services:
         value: "3.13.4"
       - key: SECRET_KEY
         generateValue: true
+      # REQUIRED. The service refuses to start without it -- there is no
+      # SQLite fallback, because that silently discarded data on every restart.
+      #   postgresql+psycopg://postgres.<ref>:<pw>@aws-0-<region>.pooler.supabase.com:6543/postgres
       - key: DATABASE_URL
         sync: false
       - key: SUPABASE_URL
