@@ -19,6 +19,9 @@ class ORMModel(BaseModel):
 class LoginRequest(BaseModel):
     email: EmailStr
     password: str
+    # Set by the administrator portal so the audit trail records which door
+    # was used. Untrusted -- it only labels the event, never grants anything.
+    portal: str | None = None
 
 
 class SignupRequest(BaseModel):

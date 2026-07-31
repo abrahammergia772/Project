@@ -38,6 +38,17 @@ WORKFORCE_DEPT = "Workforce & Attendance"
 # Roles a user may never self-assign at signup.
 PRIVILEGED_ROLES = {SUPER_ADMIN, GENERAL_MANAGER}
 
+# Oversight roles that sign in through the separate administrator entrance
+# (admin.html) rather than the public staff page. Mirrors
+# Roles.PRIVILEGED_LOGIN_ROLES in js/roles.js. This drives audit labelling and
+# the `uses_admin_portal` hint returned at login -- it is NOT an access
+# control by itself; every endpoint still authorizes per request.
+PRIVILEGED_LOGIN_ROLES = {SUPER_ADMIN, GENERAL_MANAGER, AUDITOR}
+
+
+def uses_privileged_login(role: str) -> bool:
+    return role in PRIVILEGED_LOGIN_ROLES
+
 
 # ---------------- Passwords ----------------
 def hash_password(plain: str) -> str:

@@ -61,24 +61,37 @@ const API = (() => {
   // Maps a demo email/role-chip login to one of our pre-seeded fixed
   // identities in mock-data.js so every role lands on believable data.
   function resolveDemoUser(email, roleHint) {
-    const e = (email || "").toLowerCase();
+    const e = (email || "").toLowerCase().trim();
     let role = roleHint;
+
+    // An exact seeded match wins outright: sign in as that actual person,
+    // rather than as the canned archetype for their role. Without this,
+    // meron.tadesse@buildiq.et logged in as a different Department Manager.
+    if (!roleHint) {
+      const exact = MockData.members.find(m => (m.email || "").toLowerCase() === e);
+      if (exact) return buildDemoUser(exact, email);
+      const exactClient = MockData.clients.find(c => (c.email || "").toLowerCase() === e);
+      if (exactClient) return buildDemoClient(exactClient);
+    }
+
     if (!role) {
-      if (e.includes("general") || e.includes("gm")) role = "General Manager";
-      else if (e.includes("project.manager") || e.startsWith("pm@")) role = "Project Manager";
-      else if (e.includes("department") || e.includes("manager")) role = "Department Manager";
-      else if (e.includes("engineer")) role = "Engineer";
-      else if (e.includes("audit")) role = "Auditor";
-      else if (e.includes("client")) role = "Client";
-      else role = "Super Admin";
+      // Prefer an EXACT match against a seeded account. The previous version
+      // guessed from substrings and fell back to "Super Admin" for anything
+      // unrecognised -- so any unknown address (and "attacker@gmail.com",
+      // which contains "gm") was silently granted an oversight role. Demo
+      // mode must never hand out privilege it wasn't explicitly asked for.
+      // Unknown address: only the exact demo aliases map to a role, and the
+      // default is the LEAST privileged one, never an administrator.
+      role = {
+        "admin@buildiq.et": "Super Admin",
+        "gm@buildiq.et": "General Manager",
+        "auditor@buildiq.et": "Auditor",
+        "pm@buildiq.et": "Project Manager",
+        "engineer@buildiq.et": "Engineer",
+        "client@buildiq.et": "Client",
+      }[e] || "Engineer";
     }
-    if (role === "Client") {
-      const client = MockData.clients[0];
-      return {
-        id: client.id, name: client.contact_name, email: client.email, role: "Client",
-        department: null, org_name: client.company, avatar: null, client_id: client.id,
-      };
-    }
+    if (role === "Client") return buildDemoClient(MockData.clients[0]);
     let member;
     if (role === "Super Admin") member = MockData.getMemberById("mem_1");
     else if (role === "General Manager") member = MockData.getMemberById("mem_2");
@@ -87,6 +100,10 @@ const API = (() => {
     else if (role === "Auditor") member = MockData.getMemberById("mem_5");
     else member = MockData.getMemberById("mem_6"); // Engineer
 
+    return buildDemoUser(member, email);
+  }
+
+  function buildDemoUser(member, email) {
     return {
       id: member.id, name: member.full_name, email: email || member.email, role: member.role,
       department: member.department, org_name: "Wolaita Construction Group", avatar: null,
@@ -94,6 +111,13 @@ const API = (() => {
       // Multi-role support: everything this person may act as.
       roles: Array.isArray(member.roles) && member.roles.length ? member.roles : [member.role],
       role_contexts: member.role_contexts || {},
+    };
+  }
+
+  function buildDemoClient(client) {
+    return {
+      id: client.id, name: client.contact_name, email: client.email, role: "Client",
+      department: null, org_name: client.company, avatar: null, client_id: client.id,
     };
   }
 
@@ -655,9 +679,11 @@ const API = (() => {
   // ---------------- Public API surface ----------------
   return {
     // Auth
-    login: (email, password) => BUILDIQ_CONFIG.MOCK_MODE
+    // `portal` is optional and purely for the audit trail: the administrator
+    // entrance passes "admin" so the server can record which door was used.
+    login: (email, password, portal = null) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.login(email, password)
-      : request("/auth/login", { method: "POST", body: { email, password }, auth: false }),
+      : request("/auth/login", { method: "POST", body: { email, password, portal }, auth: false }),
 
     signup: (payload) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.signup(payload)

@@ -57,7 +57,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     if user.status != "Active":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "This account is suspended")
 
-    record_audit(db, user, "LOGIN", "auth/login")
+    # Label the entrance so an auditor can see how an oversight account got in
+    # -- e.g. a Super Admin arriving via the public staff page is worth noticing.
+    via_admin_portal = (payload.portal or "").lower() == "admin"
+    record_audit(
+        db, user,
+        "ADMIN_PORTAL_LOGIN" if via_admin_portal else "LOGIN",
+        "auth/login",
+    )
     return _token_response(user)
 
 

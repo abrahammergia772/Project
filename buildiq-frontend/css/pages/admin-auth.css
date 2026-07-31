@@ -1,0 +1,190 @@
+/* ============================================================
+   BuildIQ — admin-auth.css (admin.html — Administrator Portal)
+
+   Deliberately unlike the staff sign-in page. Where index.html is a
+   light, welcoming, two-panel marketing layout, this is a single
+   centred dark "operations console" card: narrower, colder, with a
+   steel-blue accent instead of the orange brand colour, so an admin
+   can tell at a glance which door they are standing at.
+   ============================================================ */
+
+.admin-auth-body {
+  /* Always dark, regardless of the saved theme preference. */
+  background: #06080C;
+  color: #E6ECF5;
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28px 18px;
+  position: relative;
+  overflow-x: hidden;
+}
+
+/* ---------- Background: blueprint grid + cold glow ---------- */
+.admin-grid-bg {
+  position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image:
+    linear-gradient(rgba(120, 160, 210, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(120, 160, 210, 0.055) 1px, transparent 1px);
+  background-size: 46px 46px;
+  /* Fade the grid out toward the edges so the card stays the focus. */
+  -webkit-mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 100%);
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 45%, #000 30%, transparent 100%);
+}
+.admin-glow {
+  position: fixed; z-index: 0; pointer-events: none;
+  top: -22%; left: 50%; transform: translateX(-50%);
+  width: 780px; height: 640px;
+  background: radial-gradient(circle, rgba(56, 128, 220, 0.20) 0%, transparent 68%);
+  filter: blur(70px);
+}
+
+.admin-auth-shell { position: relative; z-index: 1; width: 100%; display: flex; justify-content: center; }
+
+/* ---------- The card ---------- */
+.admin-auth-card {
+  width: 100%;
+  max-width: 428px;
+  background: linear-gradient(180deg, rgba(21, 27, 38, 0.94) 0%, rgba(14, 18, 26, 0.96) 100%);
+  border: 1px solid #232C3B;
+  border-radius: 16px;
+  padding: 30px 32px 26px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.62),
+    inset 0 1px 0 rgba(255, 255, 255, 0.045);
+  animation: adminCardIn 320ms cubic-bezier(.16,1,.3,1) both;
+}
+@keyframes adminCardIn {
+  from { opacity: 0; transform: translateY(14px) scale(0.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ---------- Restricted badge ---------- */
+.admin-badge-row { display: flex; justify-content: center; margin-bottom: 20px; }
+.admin-restricted-badge {
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 13px; border-radius: 100px;
+  background: rgba(56, 128, 220, 0.11);
+  border: 1px solid rgba(96, 160, 240, 0.32);
+  color: #7FB2F0;
+  font-size: 11px; font-weight: 700;
+  letter-spacing: 0.09em; text-transform: uppercase;
+}
+.admin-restricted-badge i { font-size: 11px; }
+
+/* ---------- Brand ---------- */
+.admin-brand { display: flex; align-items: center; gap: 13px; margin-bottom: 16px; }
+.admin-brand img { width: 40px; height: 40px; }
+.admin-brand-name {
+  font-family: var(--font-display); font-size: 20px; font-weight: 700;
+  color: #F2F6FC; line-height: 1.15;
+}
+.admin-brand-sub {
+  font-size: 12px; font-weight: 600; letter-spacing: 0.03em;
+  color: #7FB2F0; margin-top: 1px;
+}
+
+.admin-intro {
+  font-size: 12.8px; line-height: 1.6; color: #93A1B8;
+  padding-bottom: 16px; margin-bottom: 16px;
+  border-bottom: 1px solid #1E2635;
+}
+
+/* ---------- Which roles belong here ---------- */
+.admin-role-strip {
+  display: flex; flex-wrap: wrap; gap: 7px; margin-bottom: 20px;
+}
+.admin-role-strip span {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px; border-radius: 6px;
+  background: rgba(255, 255, 255, 0.032);
+  border: 1px solid #232C3B;
+  font-size: 11.5px; font-weight: 600; color: #A9B6CA;
+}
+.admin-role-strip i { font-size: 10.5px; color: #6E9BD4; }
+
+/* ---------- Form ---------- */
+.admin-auth-card .field label { color: #A9B6CA; font-size: 12.5px; }
+.admin-auth-card .input {
+  background: #0C1017;
+  border-color: #232C3B;
+  color: #E9EFF8;
+}
+.admin-auth-card .input::placeholder { color: #56637A; }
+.admin-auth-card .input:focus {
+  border-color: #4A8AD8;
+  box-shadow: 0 0 0 3px rgba(74, 138, 216, 0.16);
+}
+.admin-auth-card .input-wrap > i { color: #5C6A80; }
+.admin-auth-card .input-toggle { color: #5C6A80; }
+.admin-auth-card .input-toggle:hover { color: #7FB2F0; background: rgba(255,255,255,0.05); }
+
+/* Steel-blue submit — not the orange staff brand button. */
+.admin-submit {
+  background: linear-gradient(180deg, #3D7FD0 0%, #2E68B4 100%);
+  color: #fff;
+  border: 1px solid #4E90DE;
+  box-shadow: 0 5px 18px rgba(45, 105, 185, 0.34);
+  margin-top: 4px;
+}
+.admin-submit:hover:not(:disabled) {
+  background: linear-gradient(180deg, #4A8CDB 0%, #3573C0 100%);
+}
+.admin-submit:disabled { opacity: 0.72; }
+
+.admin-forgot {
+  text-align: center; margin: 14px 0 0; color: #7FB2F0; font-size: 12.5px;
+}
+
+/* ---------- Inline error ---------- */
+.admin-error {
+  display: flex; align-items: flex-start; gap: 9px;
+  padding: 10px 12px; margin-bottom: 14px;
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.09);
+  border: 1px solid rgba(239, 68, 68, 0.32);
+  color: #F1A4A4; font-size: 12.4px; line-height: 1.5;
+}
+.admin-error i { margin-top: 2px; color: #EF4444; flex-shrink: 0; }
+.admin-error.hidden { display: none; }
+
+/* ---------- Divider + demo chips ---------- */
+.admin-divider {
+  display: flex; align-items: center; gap: 11px;
+  margin: 20px 0 14px;
+  color: #5C6A80; font-size: 11.5px;
+  text-transform: uppercase; letter-spacing: 0.07em;
+}
+.admin-divider::before, .admin-divider::after {
+  content: ""; flex: 1; height: 1px; background: #1E2635;
+}
+.admin-chips { margin-bottom: 0; }
+.admin-chips .role-chip {
+  background: rgba(255, 255, 255, 0.032);
+  border-color: #232C3B;
+  color: #A9B6CA;
+}
+.admin-chips .role-chip:hover {
+  border-color: #4A8AD8; color: #7FB2F0; background: rgba(74, 138, 216, 0.09);
+}
+
+/* ---------- Footer ---------- */
+.admin-foot {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 22px; padding-top: 16px;
+  border-top: 1px solid #1E2635;
+  font-size: 12.2px; color: #6B7890;
+}
+.admin-foot i { font-size: 10.5px; }
+.admin-foot a { color: #7FB2F0; font-weight: 600; }
+.admin-foot a:hover { text-decoration: underline; }
+
+/* ---------- Small screens ---------- */
+@media (max-width: 480px) {
+  .admin-auth-card { padding: 24px 20px 22px; border-radius: 14px; }
+  .admin-brand img { width: 34px; height: 34px; }
+  .admin-brand-name { font-size: 18px; }
+  .admin-role-strip span { font-size: 11px; }
+}

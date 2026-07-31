@@ -118,13 +118,14 @@
 
         <div class="divider-text">or continue as</div>
 
+        <!-- Oversight roles (Super Admin / General Manager / Auditor) are
+             deliberately absent: they sign in through the unlisted
+             administrator entrance, so their demo shortcuts don't belong on
+             the public page. -->
         <div class="role-chips">
-          <button class="role-chip" data-role="Super Admin">Super Admin</button>
-          <button class="role-chip" data-role="General Manager">General Manager</button>
           <button class="role-chip" data-role="Department Manager">Dept. Manager</button>
           <button class="role-chip" data-role="Project Manager">Project Manager</button>
           <button class="role-chip" data-role="Engineer">Engineer</button>
-          <button class="role-chip" data-role="Auditor">Auditor</button>
           <button class="role-chip" data-role="Client">Client</button>
         </div>
 
@@ -586,6 +587,17 @@
   const urlToken = new URLSearchParams(location.search).get("reset_token");
   if (urlToken) openResetView(urlToken);
 
+  // ...and /index.html?forgot=1&email=... , used by the administrator portal
+  // so an admin who forgot their password lands straight on the right form
+  // with their address already filled in.
+  const params = new URLSearchParams(location.search);
+  if (params.get("forgot") === "1") {
+    const carried = params.get("email");
+    if (carried) document.getElementById("forgotEmail").value = carried;
+    document.getElementById("forgotSent").classList.add("hidden");
+    showView(forgotView);
+  }
+
   // Password show/hide toggles
   function bindToggle(btnId, inputId) {
     const btn = document.getElementById(btnId);
@@ -656,6 +668,14 @@
     btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Signing in...`;
     try {
       const user = await Auth.login(email, password);
+      // Oversight roles must use the administrator entrance. Credentials were
+      // valid, so we hand the session over rather than throwing it away --
+      // admin.html picks it up and completes the sign-in there.
+      if (Roles.usesPrivilegedLogin(user.role)) {
+        Components.createToast(`${user.role} accounts sign in via the administrator portal. Redirecting...`, "info");
+        setTimeout(() => window.location.href = "admin.html?handoff=1", 900);
+        return;
+      }
       Components.createToast(`Welcome back, ${user.name}!`, "success");
       setTimeout(() => window.location.href = "dashboard.html", 500);
     } catch (err) {

@@ -667,3 +667,67 @@ def test_smart_search(client):
     if results:
         scores = [x["similarity_score"] for x in results]
         assert scores == sorted(scores, reverse=True)
+
+
+# ---------------- Administrator portal ----------------
+# Oversight roles sign in through a separate, unlisted entrance (admin.html).
+# The server does not gate on it -- a private URL is not an access control --
+# but it does record WHICH door was used so an auditor can spot an oversight
+# account arriving through the public staff page.
+
+def test_privileged_login_roles_match_the_frontend():
+    """app/security.py must stay in step with js/roles.js."""
+    from app.security import PRIVILEGED_LOGIN_ROLES, uses_privileged_login
+
+    assert PRIVILEGED_LOGIN_ROLES == {"Super Admin", "General Manager", "Auditor"}
+    for role in ("Super Admin", "General Manager", "Auditor"):
+        assert uses_privileged_login(role) is True
+    for role in ("Department Manager", "Project Manager", "Engineer", "Client"):
+        assert uses_privileged_login(role) is False
+
+
+def test_login_accepts_the_portal_hint(client):
+    r = client.post("/auth/login",
+                    json={"email": LOGINS["admin"], "password": PW, "portal": "admin"})
+    assert r.status_code == 200
+    assert r.json()["user"]["role"] == "Super Admin"
+
+
+def test_portal_is_optional(client):
+    """Existing clients that don't send `portal` must keep working."""
+    r = client.post("/auth/login", json={"email": LOGINS["admin"], "password": PW})
+    assert r.status_code == 200
+
+
+def test_admin_portal_login_is_labelled_in_the_audit_trail(client):
+    admin = hdr(client, "admin")
+    client.post("/auth/login",
+                json={"email": LOGINS["gm"], "password": PW, "portal": "admin"})
+    logs = client.get("/audit/logs?action=ADMIN_PORTAL_LOGIN&limit=50", headers=admin).json()
+    assert logs, "the portal login should have been recorded"
+    assert all(entry["action"] == "ADMIN_PORTAL_LOGIN" for entry in logs)
+
+
+def test_staff_login_is_not_labelled_as_portal(client):
+    """An ordinary sign-in stays a plain LOGIN, so the two are distinguishable."""
+    admin = hdr(client, "admin")
+    before = len(client.get("/audit/logs?action=ADMIN_PORTAL_LOGIN&limit=500",
+                            headers=admin).json())
+    client.post("/auth/login", json={"email": LOGINS["engineer"], "password": PW})
+    after = len(client.get("/audit/logs?action=ADMIN_PORTAL_LOGIN&limit=500",
+                           headers=admin).json())
+    assert after == before, "a staff login must not be recorded as a portal login"
+
+
+def test_portal_hint_cannot_change_the_granted_role(client):
+    """The hint is untrusted decoration -- it must never elevate anyone."""
+    r = client.post("/auth/login",
+                    json={"email": LOGINS["engineer"], "password": PW, "portal": "admin"})
+    assert r.status_code == 200
+    assert r.json()["user"]["role"] == "Engineer"
+
+
+def test_portal_hint_does_not_bypass_a_bad_password(client):
+    r = client.post("/auth/login",
+                    json={"email": LOGINS["admin"], "password": "wrong", "portal": "admin"})
+    assert r.status_code == 401

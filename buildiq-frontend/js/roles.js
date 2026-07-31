@@ -14,6 +14,15 @@ const Roles = (() => {
 
   const PROJECT_MANAGER = "Project Manager";
 
+  // ---------------- Privileged sign-in ----------------
+  // Oversight roles sign in through a separate, unlisted entrance
+  // (admin.html) rather than the public login page. This is presentation and
+  // routing only -- it is NOT a security boundary. Every real permission is
+  // still enforced per-request on the server; a private URL just keeps the
+  // administrative door out of public view and off the demo chip list.
+  const PRIVILEGED_LOGIN_ROLES = ["Super Admin", "General Manager", "Auditor"];
+  function usesPrivilegedLogin(role) { return PRIVILEGED_LOGIN_ROLES.includes(role); }
+
   // ---------------- Complaints (#6) ----------------
   // Admin + General Manager: read & resolve ANY complaint.
   // Department Manager: read & resolve complaints routed to their own department only.
@@ -318,6 +327,7 @@ const Roles = (() => {
     canResolveAllComplaints, canResolveDeptComplaints, canResolveComplaint, isSubmitOnly, visibleComplaints,
     canViewAllDepartments, canViewOwnDepartmentOnly, visibleDepartments,
     REPORT_TYPES, reportTypesFor, reportScopeLocked,
+    PRIVILEGED_LOGIN_ROLES, usesPrivilegedLogin,
     PROJECT_MANAGER, isProjectManager, managedProjects, managesProject, managedTeam,
     canUpdateProjectProgress,
     FULL_PROJECT_ACCESS, hasFullProjectAccess, worksOnProject,

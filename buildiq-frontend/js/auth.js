@@ -34,8 +34,8 @@ const Auth = (() => {
     localStorage.removeItem("buildiq_active_role");
   }
 
-  async function login(email, password) {
-    const res = await API.login(email, password);
+  async function login(email, password, portal = null) {
+    const res = await API.login(email, password, portal);
     setSession(res);
     return res.user;
   }
@@ -46,9 +46,26 @@ const Auth = (() => {
     return res.user;
   }
 
+  // Where a signed-out user should land. Oversight roles came in through the
+  // unlisted administrator portal, so send them back there rather than
+  // dumping them on the public staff page. Read the role BEFORE the session
+  // is cleared, since that is the only place it is recorded.
+  const STAFF_LOGIN = "index.html";
+  const ADMIN_LOGIN = "admin.html";
+
+  function loginPageFor(user) {
+    const u = user || getUser();
+    const roles = (u && Array.isArray(u.roles) && u.roles.length) ? u.roles : (u ? [u.role] : []);
+    const privileged = window.Roles
+      ? roles.some(r => Roles.usesPrivilegedLogin(r))
+      : false;
+    return privileged ? ADMIN_LOGIN : STAFF_LOGIN;
+  }
+
   function logout({ silent = false } = {}) {
+    const target = loginPageFor();
     clearSession();
-    if (!silent) window.location.href = "index.html";
+    if (!silent) window.location.href = target;
   }
 
   // ---------------- Multi-role support ----------------
@@ -141,8 +158,9 @@ const Auth = (() => {
       })
       .catch(() => {
         // Refresh failed — the session is no longer trustworthy.
+        const target = loginPageFor();
         logout({ silent: true });
-        window.location.href = "index.html";
+        window.location.href = target;
         return false;
       })
       .finally(() => { refreshing = null; });
@@ -151,6 +169,7 @@ const Auth = (() => {
   }
 
   return { getToken, getUser, getExpiry, isLoggedIn, setSession, clearSession, login, signup, logout,
+    loginPageFor, STAFF_LOGIN, ADMIN_LOGIN,
     hasRole, holdsRole, maybeRefresh,
     getRoles, hasMultipleRoles, getActiveRole, switchRole, restoreActiveRole };
 })();
