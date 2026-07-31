@@ -1,0 +1,128 @@
+/* ============================================================
+   BuildIQ — attendance.css
+   ============================================================ */
+.attendance-stats { display: grid; grid-template-columns: repeat(5,1fr); gap: 14px; margin-bottom: 18px; }
+.attendance-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 18px; }
+
+.ranking-list { display: flex; flex-direction: column; gap: 10px; }
+.ranking-row {
+  display: grid; grid-template-columns: 42px 1fr auto auto; gap: 14px; align-items: center;
+  padding: 14px; background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius);
+}
+.ranking-score-ring {
+  width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.rank-badge {
+  width: 26px; height: 26px; border-radius: 50%; background: var(--bg-hover); color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center; font-size: 11.5px; font-weight: 700; flex-shrink: 0;
+}
+
+.take-attendance-row {
+  display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center;
+  padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); margin-bottom: 8px;
+  background: var(--bg-input);
+}
+.attendance-status-toggle { display: flex; gap: 8px; }
+.attendance-status-toggle button {
+  padding: 8px 16px; border-radius: var(--radius-sm); font-size: 12.5px; font-weight: 700;
+  border: 1.5px solid var(--border); color: var(--text-secondary); background: var(--bg-card);
+  display: inline-flex; align-items: center; gap: 6px; transition: all var(--t-fast);
+}
+.attendance-status-toggle button:hover { border-color: var(--text-muted); }
+.attendance-status-toggle button.active[data-status="Present"] { background: rgba(var(--green-rgb),0.16); border-color: var(--green); color: var(--green); }
+.attendance-status-toggle button.active[data-status="Absent"] { background: rgba(var(--red-rgb),0.16); border-color: var(--red); color: var(--red); }
+
+@media (max-width: 1100px) { .attendance-stats { grid-template-columns: repeat(2,1fr); } }
+@media (max-width: 640px) {
+  .attendance-toolbar { flex-direction: column; align-items: stretch; }
+  .take-attendance-row { grid-template-columns: 1fr; }
+  .ranking-row { grid-template-columns: 34px 1fr; grid-template-areas: "ring main" "reason reason"; }
+}
+
+/* ============================================================
+   Absence reasons + Workforce-only register
+   ============================================================ */
+.attendance-notice {
+  display: flex; align-items: flex-start; gap: 11px;
+  padding: 13px 16px; margin-bottom: 16px;
+  border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--bg-card); color: var(--text-secondary);
+  font-size: 12.5px; line-height: 1.6;
+}
+.attendance-notice i { font-size: 14px; margin-top: 2px; color: var(--blue); flex-shrink: 0; }
+.attendance-notice.warn {
+  border-color: rgba(var(--yellow-rgb), 0.4);
+  background: rgba(var(--yellow-rgb), 0.08);
+}
+.attendance-notice.warn i { color: var(--yellow); }
+
+.readonly-pill {
+  display: inline-flex; align-items: center; gap: 6px; margin-left: auto;
+  padding: 5px 11px; border-radius: 100px;
+  background: var(--bg-input); color: var(--text-muted);
+  font-size: 11.5px; font-weight: 600;
+}
+
+/* ---------- My Attendance ---------- */
+.my-attendance-list { display: flex; flex-direction: column; gap: 9px; }
+.my-att-row {
+  display: grid; grid-template-columns: 62px 1fr auto; gap: 14px; align-items: center;
+  padding: 13px 15px; border: 1px solid var(--border);
+  border-radius: var(--radius); background: var(--bg-card);
+  transition: border-color var(--t-base);
+}
+.my-att-row.absent { border-left: 3px solid var(--red); }
+.my-att-row:hover { border-color: var(--border-strong, var(--accent)); }
+.my-att-date { display: flex; flex-direction: column; text-align: center; }
+.my-att-date b { font-size: 13.5px; color: var(--text-primary); }
+.my-att-date span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; }
+.my-att-main { min-width: 0; display: flex; flex-direction: column; gap: 7px; }
+.my-att-reason {
+  display: flex; gap: 9px; align-items: baseline; flex-wrap: wrap;
+  font-size: 12.5px; color: var(--text-secondary); line-height: 1.55;
+}
+.my-att-review {
+  font-size: 11.5px; color: var(--text-muted);
+  display: flex; align-items: center; gap: 6px;
+}
+.my-att-actions { display: flex; align-items: center; }
+.locked-note {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11.5px; color: var(--green); font-weight: 600;
+}
+.reason-cat {
+  display: inline-block; padding: 2px 9px; border-radius: 100px;
+  background: rgba(var(--accent-rgb), 0.14); color: var(--accent);
+  font-size: 11px; font-weight: 700; white-space: nowrap;
+}
+
+/* ---------- Reasons review queue ---------- */
+.reasons-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 14px; }
+.reason-card {
+  display: flex; flex-direction: column; gap: 11px;
+  padding: 16px; border: 1px solid var(--border);
+  border-radius: var(--radius-lg); background: var(--bg-card);
+}
+.reason-card.is-pending { border-left: 3px solid var(--blue); }
+.reason-card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
+.reason-card-body p {
+  font-size: 13px; color: var(--text-secondary);
+  line-height: 1.6; margin: 7px 0 0;
+}
+.reason-meta { font-size: 11px; color: var(--text-muted); margin-top: 7px; }
+.reason-review {
+  display: flex; align-items: flex-start; gap: 7px;
+  padding: 9px 11px; border-radius: var(--radius);
+  background: var(--bg-input); color: var(--text-muted);
+  font-size: 11.5px; line-height: 1.5;
+}
+.reason-card-actions { display: flex; gap: 8px; padding-top: 3px; }
+.reason-inline { display: inline-flex; align-items: center; gap: 7px; }
+.reason-inline span { font-size: 11.5px; color: var(--text-muted); }
+
+@media (max-width: 700px) {
+  .reasons-list { grid-template-columns: 1fr; }
+  .my-att-row { grid-template-columns: 52px 1fr; }
+  .my-att-actions { grid-column: 1 / -1; }
+}
