@@ -150,8 +150,22 @@ def executive_summary(user: User = Depends(get_current_user), db: Session = Depe
 @router.get("/ai/status")
 def ai_status(user: User = Depends(get_current_user)):
     """Lets the UI show whether live AI is active or heuristics are in use."""
+    live = groq_service.is_available()
+    # Report the model ACTUALLY in use. This previously always returned
+    # GROQ_MODEL, so an OpenAI-compatible provider showed the wrong name.
+    if live and settings.uses_openai_compatible:
+        model = settings.AI_MODEL
+    elif live:
+        model = settings.GROQ_MODEL
+    else:
+        model = None
+
     return {
-        "groq_available": groq_service.is_available(),
-        "model": settings.GROQ_MODEL if groq_service.is_available() else None,
-        "mode": "groq" if groq_service.is_available() else "heuristic",
+        "groq_available": live,          # kept: the frontend reads this key
+        "model": model,
+        "mode": "groq" if live else "heuristic",
+        "provider": settings.ai_provider_label,
+        # Verified free models you can drop into AI_MODEL. Free model ids
+        # churn, so this is a starting point rather than a guarantee.
+        "known_free_models": settings.KNOWN_FREE_MODELS,
     }

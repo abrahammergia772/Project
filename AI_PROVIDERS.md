@@ -41,7 +41,7 @@ Save → Render redeploys → check `/health`:
 
 | Provider | `AI_BASE_URL` | Example `AI_MODEL` | Free tier |
 |---|---|---|---|
-| **OpenRouter** | `https://openrouter.ai/api/v1` | `deepseek/deepseek-r1:free` | 20 req/min, 50 req/day |
+| **OpenRouter** | `https://openrouter.ai/api/v1` | `openai/gpt-oss-20b:free` | 20 req/min, 50 req/day |
 | **Cerebras** | `https://api.cerebras.ai/v1` | `gpt-oss-120b` | 5 req/min, 1M tokens/day |
 | **Google AI Studio** | `https://generativelanguage.googleapis.com/v1beta/openai` | `gemini-2.5-flash` | Generous; trains on data outside UK/EEA |
 | **Scaleway** | `https://api.scaleway.ai/v1` | varies | 1M free tokens |
@@ -49,6 +49,34 @@ Save → Render redeploys → check `/health`:
 
 Model ids change often. Check the provider's `/models` endpoint or dashboard
 for current names rather than trusting the examples above.
+
+### Verified free models
+
+Checked against OpenRouter's live catalogue:
+
+| `AI_MODEL` | Context | JSON mode | Notes |
+|---|---|---|---|
+| `openai/gpt-oss-20b:free` | 131k | ✅ yes | **Recommended.** Supports `response_format`, so the structured features are reliable. |
+| `inclusionai/ling-3.0-flash:free` | 262k | ⚠️ no | Largest context. Works, but see the caveat below. |
+| `deepseek/deepseek-r1:free` | 164k | ⚠️ no | Strong reasoning, slower. |
+
+**About the JSON column.** Project risk analysis and complaint routing ask the
+model for a JSON object. Models marked ✅ advertise `response_format` and
+return clean JSON. Models marked ⚠️ do not — BuildIQ still copes, because
+`complete_json()` extracts a JSON object out of surrounding prose, and falls
+back to the heuristics if it can't. In practice the ⚠️ models fall back more
+often on those two features. The chatbot and summaries are unaffected.
+
+If in doubt, use `openai/gpt-oss-20b:free`.
+
+You can see the current list at runtime:
+
+```
+GET /ai/status
+```
+
+which returns the live provider, the model actually in use, and
+`known_free_models`.
 
 ### OpenRouter — the easiest free option
 

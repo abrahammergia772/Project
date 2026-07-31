@@ -138,3 +138,61 @@ def test_base_url_trailing_slash_is_handled(monkeypatch):
 def test_health_reports_the_provider(client):
     body = client.get("/health").json()
     assert "ai_provider" in body
+
+
+# ---------------- Known free models ----------------
+# Verified against OpenRouter's live /models endpoint. Free ids churn, so these
+# are a documented starting point rather than a guarantee.
+
+def test_the_two_requested_models_are_listed():
+    from app.config import Settings
+
+    ids = [m["id"] for m in Settings.KNOWN_FREE_MODELS]
+    assert "inclusionai/ling-3.0-flash:free" in ids
+    assert "openai/gpt-oss-20b:free" in ids
+
+
+def test_every_known_model_is_a_free_openrouter_id():
+    from app.config import Settings
+
+    for m in Settings.KNOWN_FREE_MODELS:
+        assert m["id"].endswith(":free"), m["id"]
+        assert "/" in m["id"], m["id"]
+        assert m["context"] > 0
+        assert isinstance(m["supports_json"], bool)
+
+
+def test_json_support_is_recorded_accurately():
+    """Checked against OpenRouter's supported_parameters.
+
+    Ling 3.0 Flash does NOT advertise response_format. It still works --
+    complete_json() salvages an object out of prose -- but the structured
+    features are more reliable on gpt-oss-20b, which does support it.
+    """
+    from app.config import Settings
+
+    by_id = {m["id"]: m for m in Settings.KNOWN_FREE_MODELS}
+    assert by_id["openai/gpt-oss-20b:free"]["supports_json"] is True
+    assert by_id["inclusionai/ling-3.0-flash:free"]["supports_json"] is False
+
+
+def test_ai_status_reports_the_model_actually_in_use(monkeypatch, client):
+    """It previously always returned GROQ_MODEL, which is wrong for an
+    OpenAI-compatible provider."""
+    from app.routers import ai as ai_router
+
+    monkeypatch.setattr(ai_router.settings, "AI_PROVIDER", "openai_compatible")
+    monkeypatch.setattr(ai_router.settings, "AI_BASE_URL", OR)
+    monkeypatch.setattr(ai_router.settings, "AI_API_KEY", "k")
+    monkeypatch.setattr(ai_router.settings, "AI_MODEL", "openai/gpt-oss-20b:free")
+    monkeypatch.setattr(ai_router.groq_service, "is_available", lambda: True)
+
+    r = client.post("/auth/login",
+                    json={"email": "admin@buildiq.et", "password": "Demo1234!"})
+    tok = {"Authorization": f"Bearer {r.json()['token']}"}
+    body = client.get("/ai/status", headers=tok).json()
+
+    assert body["model"] == "openai/gpt-oss-20b:free"
+    assert "openrouter.ai" in body["provider"]
+    assert any(m["id"] == "inclusionai/ling-3.0-flash:free"
+               for m in body["known_free_models"])

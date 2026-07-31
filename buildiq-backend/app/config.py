@@ -3,7 +3,7 @@ BuildIQ — config.py
 Runtime configuration. Everything is environment-driven; see .env.example.
 """
 from functools import lru_cache
-from typing import List
+from typing import ClassVar, List
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -61,7 +61,24 @@ class Settings(BaseSettings):
     # Used when AI_PROVIDER=openai_compatible.
     AI_BASE_URL: str = ""      # e.g. https://openrouter.ai/api/v1
     AI_API_KEY: str = ""
-    AI_MODEL: str = ""         # e.g. deepseek/deepseek-r1:free
+    AI_MODEL: str = ""         # e.g. openai/gpt-oss-20b:free
+
+    # Models verified against OpenRouter's free tier. Kept here so the
+    # /ai/status endpoint can suggest known-good ids rather than leaving you
+    # to guess -- free model names churn constantly.
+    #
+    # supports_json marks models advertising `response_format`. Those without
+    # it still work: complete_json() salvages a JSON object out of prose, but
+    # the structured features (project analysis, complaint routing) are more
+    # reliable on a model that supports it natively.
+    KNOWN_FREE_MODELS: ClassVar[list[dict]] = [
+        {"id": "openai/gpt-oss-20b:free",
+         "label": "GPT-OSS 20B", "context": 131072, "supports_json": True},
+        {"id": "inclusionai/ling-3.0-flash:free",
+         "label": "Ling 3.0 Flash", "context": 262144, "supports_json": False},
+        {"id": "deepseek/deepseek-r1:free",
+         "label": "DeepSeek R1", "context": 163840, "supports_json": False},
+    ]
 
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
