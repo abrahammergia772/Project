@@ -226,3 +226,70 @@
 }
 .role-scope-note i { margin-top: 2px; color: var(--cyan); flex-shrink: 0; }
 .role-scope-note:empty { display: none; }
+
+/* ---------- Theme toggle (sign-in page has no app shell/topbar) ---------- */
+.auth-theme-toggle {
+  position: absolute; top: 20px; right: 22px; z-index: 5;
+  width: 38px; height: 38px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--bg-card); border: 1px solid var(--border);
+  color: var(--text-secondary); font-size: 15px;
+  box-shadow: var(--shadow-sm);
+  transition: color var(--t-base), border-color var(--t-base), background var(--t-base);
+}
+.auth-theme-toggle:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ============================================================
+   Light mode refinements
+   The shared tokens make light mode legible, but the auth page has
+   hand-tuned dark decorations (blueprint grid, mesh, translucent
+   fills) that need their own light values to keep contrast.
+   ============================================================ */
+:root[data-theme="light"] .auth-left {
+  background: linear-gradient(170deg, #FFFFFF 0%, #F7F9FC 100%);
+}
+:root[data-theme="light"] .blueprint-grid {
+  opacity: 0.85;
+  background-image:
+    linear-gradient(rgba(59,130,246,0.20) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(59,130,246,0.20) 1px, transparent 1px);
+}
+/* Faint tints read as "nothing there" on white — strengthen them. */
+:root[data-theme="light"] .gradient-mesh::before,
+:root[data-theme="light"] .gradient-mesh::after { opacity: 0.10; }
+:root[data-theme="light"] .feature-item .f-icon {
+  background: rgba(var(--accent-rgb), 0.10);
+}
+:root[data-theme="light"] .role-chip {
+  background: #FFFFFF;
+  color: var(--text-secondary);
+}
+:root[data-theme="light"] .role-chip:hover {
+  background: rgba(var(--accent-rgb), 0.07);
+}
+:root[data-theme="light"] .role-card,
+:root[data-theme="light"] .avatar-upload-circle,
+:root[data-theme="light"] .step-dot {
+  background: #FFFFFF;
+}
+:root[data-theme="light"] .role-card:hover { border-color: var(--text-muted); }
+:root[data-theme="light"] .strength-seg { background: #E6E9EF; }
+:root[data-theme="light"] .input,
+:root[data-theme="light"] select.input,
+:root[data-theme="light"] textarea.input {
+  background: #FFFFFF;
+  border-color: #D8DDE6;
+}
+:root[data-theme="light"] .input:focus,
+:root[data-theme="light"] select.input:focus,
+:root[data-theme="light"] textarea.input:focus { border-color: var(--accent); }
+:root[data-theme="light"] .input::placeholder { color: #9AA2B1; }
+:root[data-theme="light"] .auth-note { background: #FFFFFF; }
+:root[data-theme="light"] .auth-note.demo {
+  background: rgba(var(--accent-rgb), 0.06);
+  border-color: rgba(var(--accent-rgb), 0.32);
+}
+
+@media (max-width: 900px) {
+  .auth-theme-toggle { top: 14px; right: 14px; }
+}

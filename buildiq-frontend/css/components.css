@@ -335,7 +335,12 @@ table.data-table { min-width: 640px; }
   font-size: 13px; font-weight: 600; color: var(--text-secondary);
 }
 .input-wrap { position: relative; display: flex; align-items: center; }
-.input-wrap i, .input-wrap .input-icon {
+/* Only the *leading* icon is absolutely positioned on the left. This must be a
+   direct child selector: `.input-wrap i` also matched the <i> inside the
+   password-visibility button, which yanked the eye glyph out of the button,
+   parked it on top of the lock icon and gave it `pointer-events: none` — so
+   the toggle had no visible, clickable surface at all. */
+.input-wrap > i, .input-wrap > .input-icon {
   position: absolute; left: 14px; color: var(--text-muted); font-size: 14px; pointer-events: none;
 }
 .input, select.input, textarea.input {
@@ -349,9 +354,21 @@ table.data-table { min-width: 640px; }
   transition: border-color var(--t-base), box-shadow var(--t-base);
 }
 .input-wrap .input { padding-left: 40px; }
+/* Password inputs sit next to a toggle button — keep the text clear of it. */
+/* `.has-toggle` is the explicit, universally-supported form; the `:has()`
+   rule is a progressive enhancement for markup built at runtime by JS. */
+.input-wrap.has-toggle .input { padding-right: 42px; }
+.input-wrap:has(.input-toggle) .input { padding-right: 42px; }
 .input-wrap .input-toggle {
-  position: absolute; right: 12px; color: var(--text-muted); pointer-events: all; cursor: pointer; background: none; border: none; font-size: 14px;
+  position: absolute; right: 6px; top: 50%; transform: translateY(-50%);
+  display: flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px; border-radius: var(--radius-sm);
+  color: var(--text-muted); pointer-events: auto; cursor: pointer;
+  background: none; border: none; font-size: 14px; padding: 0; z-index: 2;
+  transition: color var(--t-base), background var(--t-base);
 }
+.input-wrap .input-toggle:hover { color: var(--accent); background: var(--bg-hover); }
+.input-wrap .input-toggle i { position: static; color: inherit; pointer-events: none; }
 .input::placeholder { color: var(--text-muted); }
 .input:focus, select.input:focus, textarea.input:focus {
   border-color: var(--accent);

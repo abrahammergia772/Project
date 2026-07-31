@@ -14,6 +14,17 @@
 <link rel="stylesheet" href="css/tokens.css">
 <link rel="stylesheet" href="css/components.css">
 <link rel="stylesheet" href="css/pages/auth.css">
+
+<script>
+  // Applied before first paint so the page never flashes dark then repaints light.
+  // The sign-in page defaults to LIGHT; the app shell (shell.js) reads the same
+  // localStorage key, so whatever is chosen here carries into the dashboard.
+  (function () {
+    var saved = null;
+    try { saved = localStorage.getItem("buildiq_theme"); } catch (e) {}
+    if (saved !== "dark") document.documentElement.setAttribute("data-theme", "light");
+  })();
+</script>
 </head>
 <body>
 
@@ -61,6 +72,11 @@
 
   <!-- ================= RIGHT PANEL ================= -->
   <main class="auth-right">
+    <button type="button" class="auth-theme-toggle" id="authThemeToggle"
+            aria-label="Switch to dark mode" title="Switch to dark mode">
+      <i class="fa-solid fa-moon"></i>
+    </button>
+
     <div class="auth-form-box">
 
       <div class="auth-mobile-logo">
@@ -86,7 +102,7 @@
 
           <div class="field">
             <label for="loginPassword">Password</label>
-            <div class="input-wrap">
+            <div class="input-wrap has-toggle">
               <i class="fa-solid fa-lock"></i>
               <input class="input" type="password" id="loginPassword" placeholder="••••••••" required>
               <button type="button" class="input-toggle" id="toggleLoginPw" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
@@ -273,7 +289,7 @@
           <div class="signup-step" data-step="3">
             <div class="field">
               <label for="signupPassword">Password</label>
-              <div class="input-wrap"><i class="fa-solid fa-lock"></i>
+              <div class="input-wrap has-toggle"><i class="fa-solid fa-lock"></i>
                 <input class="input" type="password" id="signupPassword" placeholder="Create a password" required>
                 <button type="button" class="input-toggle" id="toggleSignupPw" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
               </div>
@@ -364,7 +380,7 @@
         <form id="resetForm" novalidate>
           <div class="field">
             <label for="resetPassword">New Password</label>
-            <div class="input-wrap">
+            <div class="input-wrap has-toggle">
               <i class="fa-solid fa-lock input-icon"></i>
               <input class="input" type="password" id="resetPassword" placeholder="Create a new password" required>
               <button type="button" class="input-toggle" id="toggleResetPw" aria-label="Show password"><i class="fa-solid fa-eye"></i></button>
@@ -418,6 +434,30 @@
   const signupView = document.getElementById("signupView");
   const forgotView = document.getElementById("forgotView");
   const resetView = document.getElementById("resetView");
+
+  // ---------------- Theme toggle ----------------
+  // The inline <head> script already applied the theme; this only wires the
+  // button and keeps the icon/label in sync with the current state.
+  const themeBtn = document.getElementById("authThemeToggle");
+  function syncThemeBtn() {
+    const isLight = document.documentElement.getAttribute("data-theme") === "light";
+    themeBtn.querySelector("i").className = `fa-solid ${isLight ? "fa-moon" : "fa-sun"}`;
+    const label = isLight ? "Switch to dark mode" : "Switch to light mode";
+    themeBtn.setAttribute("aria-label", label);
+    themeBtn.setAttribute("title", label);
+  }
+  themeBtn.addEventListener("click", () => {
+    const isLight = document.documentElement.getAttribute("data-theme") === "light";
+    if (isLight) {
+      document.documentElement.removeAttribute("data-theme");
+      try { localStorage.setItem("buildiq_theme", "dark"); } catch (e) {}
+    } else {
+      document.documentElement.setAttribute("data-theme", "light");
+      try { localStorage.setItem("buildiq_theme", "light"); } catch (e) {}
+    }
+    syncThemeBtn();
+  });
+  syncThemeBtn();
 
   const ALL_VIEWS = [loginView, signupView, forgotView, resetView];
   function showView(view) {
