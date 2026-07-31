@@ -56,15 +56,20 @@ def complete(
     max_tokens: int | None = None,
     temperature: float | None = None,
     json_mode: bool = False,
+    model: str | None = None,
 ) -> str | None:
     """
     One-shot completion. Returns the text, or None if Groq is unavailable or
     the call failed — callers must treat None as "use the local fallback".
+
+    `model` overrides the configured default for this call only. It is passed
+    through settings.resolve_model(), so an unknown id silently falls back
+    rather than reaching the provider.
     """
     if settings.uses_openai_compatible:
         return _complete_openai_compatible(
             system, user, max_tokens=max_tokens,
-            temperature=temperature, json_mode=json_mode,
+            temperature=temperature, json_mode=json_mode, model=model,
         )
 
     client = _client_or_none()
@@ -72,7 +77,7 @@ def complete(
         return None
 
     kwargs: dict[str, Any] = {
-        "model": settings.GROQ_MODEL,
+        "model": settings.resolve_model(model),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -99,6 +104,7 @@ def _complete_openai_compatible(
     max_tokens: int | None = None,
     temperature: float | None = None,
     json_mode: bool = False,
+    model: str | None = None,
 ) -> str | None:
     """Call any provider exposing an OpenAI-style /chat/completions endpoint.
 
@@ -115,7 +121,7 @@ def _complete_openai_compatible(
 
     url = settings.AI_BASE_URL.rstrip("/") + "/chat/completions"
     payload: dict[str, Any] = {
-        "model": settings.AI_MODEL,
+        "model": settings.resolve_model(model),
         "messages": [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -290,7 +296,8 @@ def executive_summary(facts: str, role: str) -> str | None:
     )
 
 
-def chat(message: str, context: str, history: list[dict] | None = None) -> str | None:
+def chat(message: str, context: str, history: list[dict] | None = None,
+         model: str | None = None) -> str | None:
     convo = ""
     for turn in (history or [])[-6:]:
         who = "User" if turn.get("role") == "user" else "Assistant"
@@ -305,4 +312,5 @@ def chat(message: str, context: str, history: list[dict] | None = None) -> str |
         ),
         max_tokens=520,
         temperature=0.5,
+        model=model,
     )

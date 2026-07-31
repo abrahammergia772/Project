@@ -182,7 +182,7 @@ const AIAssistant = (() => {
     if (sendBtn) sendBtn.disabled = true;
 
     try {
-      const res = await API.chat(text, history.slice(0, -1));
+      const res = await API.chat(text, history.slice(0, -1), AIModel.get());
       history.push({ role: "assistant", content: res.reply });
     } catch (err) {
       // Surface the failure in-thread rather than only as a toast.

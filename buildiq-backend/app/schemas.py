@@ -505,10 +505,16 @@ class SavedReportOut(ORMModel):
 class ChatRequest(BaseModel):
     message: str = Field(min_length=1)
     history: list[dict[str, Any]] = []
+    # Optional model override. Validated against settings.allowed_models();
+    # anything unrecognised falls back to the configured default.
+    model: str | None = None
 
 
 class ChatResponse(BaseModel):
     reply: str
+    # Which model actually produced this reply, so the UI can show it and a
+    # silent fallback is visible rather than hidden.
+    model: str | None = None
     ai_source: str = "heuristic"
 
 

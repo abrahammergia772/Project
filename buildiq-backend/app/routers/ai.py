@@ -66,12 +66,17 @@ def _context_prompt(ctx: dict, user: User) -> str:
 @router.post("/ai/chat", response_model=ChatResponse)
 def chat(payload: ChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     ctx = _scoped_context(db, user)
-    reply = groq_service.chat(payload.message, _context_prompt(ctx, user), payload.history)
+    # An unknown or disallowed id resolves to the default rather than erroring.
+    chosen = settings.resolve_model(payload.model)
+    reply = groq_service.chat(
+        payload.message, _context_prompt(ctx, user), payload.history, model=chosen
+    )
     if reply:
-        return ChatResponse(reply=reply, ai_source="groq")
+        return ChatResponse(reply=reply, ai_source="groq", model=chosen)
     return ChatResponse(
         reply=ai_engine.chatbot_reply(payload.message, user.role, user.department, ctx),
         ai_source="heuristic",
+        model=None,
     )
 
 
@@ -168,4 +173,6 @@ def ai_status(user: User = Depends(get_current_user)):
         # Verified free models you can drop into AI_MODEL. Free model ids
         # churn, so this is a starting point rather than a guarantee.
         "known_free_models": settings.KNOWN_FREE_MODELS,
+        # Ids a client may send as ChatRequest.model. Anything else is ignored.
+        "selectable_models": settings.allowed_models(),
     }

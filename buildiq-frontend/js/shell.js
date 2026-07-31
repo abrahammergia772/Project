@@ -437,6 +437,8 @@ const Shell = (() => {
 
     // Floating AI assistant — mounts itself on every page the user's role
     // allows, and skips the dedicated chatbot page.
+    // Pull the selectable model list once so the picker can render.
+    if (window.AIModel) AIModel.load();
     if (window.AIAssistant) AIAssistant.mount();
   }
 

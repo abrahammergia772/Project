@@ -869,7 +869,13 @@ const API = (() => {
     getReports: () => BUILDIQ_CONFIG.MOCK_MODE ? Promise.resolve([]) : request("/reports"),
 
     // AI
-    chat: (message, history = []) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.chat(message, history, Auth.getUser()) : request("/ai/chat", { method: "POST", body: { message, history } }),
+    // `model` is optional; the server ignores anything not on its allowlist.
+    chat: (message, history = [], model = null) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Mock.chat(message, history, Auth.getUser())
+      : request("/ai/chat", { method: "POST", body: { message, history, model } }),
+    getAIStatus: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ mode: "heuristic", model: null, selectable_models: [] })
+      : request("/ai/status"),
     aiSearch: (query) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.searchGlobal(query) : request("/ai/search", { method: "POST", body: { query } }),
     searchGlobal: (query) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.searchGlobal(query) : request("/ai/search", { method: "POST", body: { query } }),
 

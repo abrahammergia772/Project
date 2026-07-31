@@ -139,6 +139,43 @@ class Settings(BaseSettings):
             return bool(self.AI_BASE_URL and self.AI_API_KEY and self.AI_MODEL)
         return bool(self.GROQ_API_KEY)
 
+    def allowed_models(self) -> list[dict]:
+        """Models a user may pick at request time.
+
+        The configured default first, then the verified free ids. This list is
+        an ALLOWLIST -- see resolve_model(). A model name from the client goes
+        straight into a billed API call, so accepting arbitrary strings would
+        let anyone run an expensive model on your account.
+        """
+        out: list[dict] = []
+        current = self.AI_MODEL if self.uses_openai_compatible else self.GROQ_MODEL
+        if current:
+            out.append({
+                "id": current,
+                "label": f"{current} (default)",
+                "context": None,
+                "supports_json": True,
+                "default": True,
+            })
+        if self.uses_openai_compatible:
+            for m in self.KNOWN_FREE_MODELS:
+                if m["id"] == current:
+                    continue
+                out.append({**m, "label": m["label"], "default": False})
+        return out
+
+    def resolve_model(self, requested: str | None) -> str:
+        """Map a requested model to one we allow, else the configured default.
+
+        Unknown values fall back silently rather than erroring: a stale model
+        id in a client should degrade to the default, not break the chat.
+        """
+        default = self.AI_MODEL if self.uses_openai_compatible else self.GROQ_MODEL
+        if not requested:
+            return default
+        allowed = {m["id"] for m in self.allowed_models()}
+        return requested if requested in allowed else default
+
     @property
     def ai_provider_label(self) -> str:
         """Shown by /health so you can see which provider is actually live."""

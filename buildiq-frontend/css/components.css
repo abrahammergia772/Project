@@ -634,3 +634,20 @@ textarea.input { resize: vertical; min-height: 90px; }
   .add-person-row { grid-template-columns: 1fr 1fr; }
   .add-person-row button { grid-column: 1 / -1; }
 }
+
+/* ---------- AI model picker ---------- */
+.ai-model-label {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12.5px; font-weight: 600; color: var(--text-secondary);
+  white-space: nowrap;
+}
+.ai-model-select {
+  width: auto; min-width: 150px;
+  padding: 7px 10px; font-size: 12.5px;
+}
+/* The floating assistant is narrow, so the picker sits full-width there. */
+#aiAssistantRoot .ai-model-select { width: 100%; min-width: 0; }
+@media (max-width: 560px) {
+  .ai-model-label { font-size: 12px; }
+  .ai-model-select { min-width: 0; flex: 1; }
+}

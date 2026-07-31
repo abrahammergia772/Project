@@ -12,7 +12,10 @@ const ChatbotPage = (() => {
 
   function shell() {
     return `
-      <div class="page-header"><div><h1>AI Chatbot</h1><div class="page-sub">Ask BuildIQ AI Assistant about your organization</div></div></div>
+      <div class="page-header">
+        <div><h1>AI Chatbot</h1><div class="page-sub">Ask BuildIQ AI Assistant about your organization</div></div>
+        <div id="aiModelPicker"></div>
+      </div>
       <div class="chatbot-layout">
         <div class="conv-list" id="convList"></div>
         <div class="chat-window">
@@ -52,6 +55,17 @@ const ChatbotPage = (() => {
 
   function renderSuggestions() {
     document.getElementById("suggestionChips").innerHTML = ReferenceData.chatSuggestions.map(s => `<span class="example-chip" style="cursor:pointer;">${s}</span>`).join("");
+
+    // Model picker. Renders nothing when the deployment offers only one model.
+    AIModel.load().then(() => {
+      const holder = document.getElementById("aiModelPicker");
+      if (!holder) return;
+      const html = AIModel.selectHtml("chatModelSelect");
+      if (!html) return;
+      holder.innerHTML = `<label class="ai-model-label">Model ${html}</label>`;
+      AIModel.bind("chatModelSelect", (id) =>
+        Components.createToast(`Answers will now come from ${AIModel.shortName(id)}.`, "info"));
+    });
     Utils.qsa(".example-chip").forEach(chip => chip.addEventListener("click", () => {
       document.getElementById("chatInput").value = chip.textContent;
       sendMessage();
@@ -88,7 +102,7 @@ const ChatbotPage = (() => {
     history.push({ role: "user", content: text });
     input.value = ""; input.style.height = "auto";
     addTyping();
-    const res = await API.chat(text, history);
+    const res = await API.chat(text, history, AIModel.get());
     document.getElementById("typingRow")?.remove();
     addMessage("ai", res.reply);
     history.push({ role: "assistant", content: res.reply });
