@@ -19,6 +19,9 @@ const Router = (() => {
     complaints:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": false, "Client": true  },
     // Engineers get "own" access: they can't take attendance or see the org
     // register, but they can review their own absence days and explain them.
+    // Engineers get "own" by default (their own absence days). Engineers in
+    // the Workforce & Attendance department also take the register for the
+    // whole organization, so guard() upgrades them -- see workforceOverride().
     attendance:       { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": "own", "Engineer": "own", "Auditor": true,  "Client": false },
     audit:            { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": true,  "Client": false },
     reports:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": false, "Auditor": true,  "Client": true  },
@@ -40,10 +43,17 @@ const Router = (() => {
     return pageKeyFromFile(file);
   }
 
-  function accessFor(pageKey, role) {
+  function accessFor(pageKey, role, user = null) {
     const rule = ACCESS[pageKey];
     if (!rule) return true; // unlisted pages (index) are public/handled separately
-    return rule[role] ?? false;
+    const base = rule[role] ?? false;
+    // Department overrides role: anyone in Workforce & Attendance runs the
+    // register for the entire organization, whatever their job title.
+    if (pageKey === "attendance" && base === "own") {
+      const u = user || (window.Auth ? Auth.getUser() : null);
+      if (u && window.Roles && Roles.canTakeAttendance(u)) return true;
+    }
+    return base;
   }
 
   function canAccess(pageKey) {

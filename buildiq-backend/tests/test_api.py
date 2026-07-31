@@ -731,3 +731,48 @@ def test_portal_hint_does_not_bypass_a_bad_password(client):
     r = client.post("/auth/login",
                     json={"email": LOGINS["admin"], "password": "wrong", "portal": "admin"})
     assert r.status_code == 401
+
+
+# ---------------- Workforce & Attendance: department, not job title ----------
+# Everyone in Workforce & Attendance registers the whole organization,
+# Engineers included. The rule is department-based; a Super Admin outside that
+# department still cannot take the register.
+
+def test_workforce_rule_is_department_based_not_role_based():
+    from app.security import can_take_attendance, is_workforce_dept
+
+    class U:
+        def __init__(self, role, department):
+            self.role, self.department = role, department
+
+    WF = "Workforce & Attendance"
+    for role in ("Engineer", "Department Manager", "Project Manager",
+                 "Auditor", "General Manager", "Super Admin"):
+        assert can_take_attendance(U(role, WF)) is True, role
+    # External customers never register attendance.
+    assert can_take_attendance(U("Client", WF)) is False
+    # Job title alone grants nothing.
+    assert can_take_attendance(U("Super Admin", "Executive")) is False
+    assert can_take_attendance(U("Engineer", "Site Operations")) is False
+    assert is_workforce_dept(U("Engineer", WF)) is True
+
+
+def test_workforce_engineer_sees_all_daily_workers(client):
+    """visible_daily_workers must key off the department, not the role."""
+    from app.deps import visible_daily_workers
+    from app.database import SessionLocal
+    from app.models import DailyWorker, User
+    from sqlalchemy import select
+
+    db = SessionLocal()
+    try:
+        total = len(db.scalars(select(DailyWorker)).all())
+        eng = db.scalar(select(User).where(
+            User.department == "Workforce & Attendance", User.role == "Engineer"))
+        if eng is None:                      # seed has no Workforce Engineer
+            eng = db.scalar(select(User).where(
+                User.department == "Workforce & Attendance"))
+        assert eng is not None
+        assert len(visible_daily_workers(db, eng)) == total
+    finally:
+        db.close()

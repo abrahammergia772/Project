@@ -73,9 +73,12 @@ const AttendancePage = (() => {
 
     scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
     scopedWorkers = Roles.visibleDailyWorkers(user, DataStore.dailyWorkers);
+    // The Workforce & Attendance department registers EVERY internal member of
+    // the organization, not just Engineers and Department Managers. Clients are
+    // external and are never on the register.
     scopedStaff = Roles.canTakeAttendance(user)
-      ? DataStore.members.filter(m => m.role === "Engineer" || m.role === "Department Manager")
-      : DataStore.members.filter(m => (m.role === "Engineer" || m.role === "Department Manager") && m.department === user.department);
+      ? DataStore.members.filter(m => Roles.isRegisterable(m))
+      : DataStore.members.filter(m => Roles.isRegisterable(m) && m.department === user.department);
 
     renderStats();
     renderTab(activeTab);

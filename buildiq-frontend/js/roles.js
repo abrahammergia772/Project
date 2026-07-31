@@ -243,6 +243,11 @@ const Roles = (() => {
   function isWorkforceDept(user) {
     return !!user && user.department === WORKFORCE_DEPT;
   }
+  // Who appears on the daily register: every internal member of the
+  // organization. Clients are external customers, not staff.
+  function isRegisterable(member) {
+    return !!member && member.role !== "Client";
+  }
   function canTakeAttendance(user) {
     // Clients are external and never part of the workforce department.
     return isWorkforceDept(user) && user.role !== "Client";
@@ -304,8 +309,11 @@ const Roles = (() => {
   }
   function visibleDailyWorkers(user, allWorkers) {
     if (ORG_WIDE.includes(user.role) || user.role === "Auditor") return allWorkers;
+    // Anyone in Workforce & Attendance registers daily workers org-wide. This
+    // was previously gated on Department Manager, so a Workforce Engineer saw
+    // an empty roster and could not mark the very people they register.
+    if (canTakeAttendance(user)) return allWorkers;
     if (user.role === "Department Manager") {
-      if (user.department === WORKFORCE_DEPT) return allWorkers;
       return allWorkers.filter(w => w.department === user.department);
     }
     return [];
@@ -335,7 +343,7 @@ const Roles = (() => {
     canCreateProject, canAssignProjectManager, canAssignDepartmentHead,
     canAssignEngineerToDepartment, eligibleProjectManagers, eligibleDepartmentHeads,
     canViewTeamTasks, canAssignTasks, assignableWorkers, canManageMaterials,
-    WORKFORCE_DEPT, isWorkforceDept, canTakeAttendance, canViewAttendance, visibleAttendance, visibleDailyWorkers,
+    WORKFORCE_DEPT, isWorkforceDept, isRegisterable, canTakeAttendance, canViewAttendance, visibleAttendance, visibleDailyWorkers,
     ownAttendance, ownAbsences, canSubmitAbsenceReason, canViewAbsenceReasons,
     canReviewAbsenceReason, visibleAbsenceReasons,
     ROLE_DESCRIPTIONS,
