@@ -201,10 +201,13 @@ values
 on conflict (id) do nothing;
 
 -- The absence above, explained and approved by the Workforce manager.
+-- reason_status is 'Not Submitted' | 'Pending' | 'Accepted' | 'Rejected'
+-- (ck_attendance_reason_status). Note 'Accepted', not 'approved'.
+-- A reason may only exist on an Absent day (ck_attendance_reason_only_when_absent).
 update public.attendance
    set reason_category     = 'Medical Appointment',
        reason              = 'Hospital appointment, documentation provided.',
-       reason_status       = 'approved',
+       reason_status       = 'Accepted',
        reason_reviewed_by  = 'mem_wf_1',
        reason_submitted_at = now() - interval '1 day',
        reason_reviewed_at  = now() - interval '12 hours'

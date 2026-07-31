@@ -167,24 +167,52 @@ def _sqlite_from_schema():
     return "\n".join(ddl)
 
 
-def _enum_checks():
-    """{table: {column: [allowed, ...]}} from every `check (col in (...))`.
+def _all_checks():
+    """Every table-level CHECK constraint, as {table: [(name, expr), ...]}.
 
-    Parsed from the DDL text because pglast represents these as expression
-    trees that are far more awkward to walk than the source.
+    Parsed with balanced-paren scanning rather than a flat regex. The earlier
+    regex only matched `check (col in (...))`, so it silently skipped
+    `reason_status is null or reason_status in (...)` -- and that unchecked
+    constraint is precisely the one that failed in production.
     """
     out = {}
     for m in re.finditer(
             r"create table[^(]*?\b(?:public\.)?(\w+)\s*\((.*?)\n\);",
             SCHEMA, re.S | re.I):
         table, body = m.group(1), m.group(2)
-        found = {}
-        for c in re.finditer(r"check\s*\(\s*(\w+)\s+in\s*\(([^)]*)\)",
-                             body, re.S | re.I):
-            found[c.group(1)] = [v.strip().strip("'")
-                                 for v in c.group(2).split(",") if v.strip()]
+        found = []
+        for cm in re.finditer(r"constraint\s+(\w+)\s+check\s*\(", body, re.I):
+            i = body.index("(", cm.end() - 1)
+            depth, j = 0, i
+            while j < len(body):
+                if body[j] == "(":
+                    depth += 1
+                elif body[j] == ")":
+                    depth -= 1
+                    if depth == 0:
+                        break
+                j += 1
+            found.append((cm.group(1), " ".join(body[i + 1:j].split())))
         if found:
             out[table] = found
+    return out
+
+
+def _enum_checks():
+    """{table: {column: [allowed, ...]}} for every enum-style CHECK.
+
+    Covers both `col in (...)` and `col is null or col in (...)`.
+    """
+    out = {}
+    for table, checks in _all_checks().items():
+        cols = {}
+        for _name, expr in checks:
+            m = re.search(r"(\w+)\s+in\s*\(([^)]*)\)", expr, re.I)
+            if m:
+                cols[m.group(1)] = [v.strip().strip("'")
+                                    for v in m.group(2).split(",") if v.strip()]
+        if cols:
+            out[table] = cols
     return out
 
 
@@ -282,7 +310,7 @@ def test_running_the_sample_twice_does_not_duplicate():
 def test_the_absence_workflow_has_data():
     con = _run_sample()
     n = con.execute(
-        "select count(*) from attendance where reason_status='approved'").fetchone()[0]
+        "select count(*) from attendance where reason_status='Accepted'").fetchone()[0]
     assert n >= 1, "no approved absence reason to demonstrate the review queue"
 
 
@@ -335,3 +363,56 @@ def test_enum_casing_differs_between_tables_and_is_respected():
     assert enums["complaints"]["severity"] == ["low", "medium", "high", "critical"]
     assert enums["projects"]["delay_risk"] == ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
     assert "'HIGH'" not in SAMPLE.split("insert into public.complaints")[1].split(";")[0]
+
+
+def test_update_statements_also_respect_check_constraints():
+    """The reported failure was in an UPDATE, not an INSERT.
+
+        ERROR 23514: new row for relation "attendance" violates check
+        constraint "ck_attendance_reason_status"
+
+    The sample set reason_status = 'approved'; the constraint allows only
+    'Not Submitted' | 'Pending' | 'Accepted' | 'Rejected'. The earlier checker
+    walked INSERT rows only, so an UPDATE could write anything it liked.
+    """
+    enums = _enum_checks()
+    violations = []
+    for raw in pglast.parse_sql(SAMPLE):
+        stmt = raw.stmt
+        if type(stmt).__name__ != "UpdateStmt":
+            continue
+        table = stmt.relation.relname
+        for target in (stmt.targetList or []):
+            val = target.val
+            if type(val).__name__ != "A_Const" or getattr(val, "isnull", False):
+                continue
+            sval = getattr(val.val, "sval", None)
+            allowed = enums.get(table, {}).get(target.name)
+            if sval is not None and allowed and sval not in allowed:
+                violations.append(
+                    f"UPDATE {table}.{target.name} = {sval!r} not in {allowed}")
+    assert not violations, "CHECK violations in UPDATE:\n  " + "\n  ".join(violations)
+
+
+def test_every_enum_check_form_is_recognised():
+    """Guards the checker itself.
+
+    `reason_status is null or reason_status in (...)` was invisible to the
+    original regex, so the constraint was never validated. If this assertion
+    fails the extractor has regressed and other constraints may be unchecked.
+    """
+    enums = _enum_checks()
+    assert enums["attendance"]["reason_status"] == [
+        "Not Submitted", "Pending", "Accepted", "Rejected"]
+    # 22 table-level CHECK constraints exist in the schema today.
+    assert sum(len(v) for v in _all_checks().values()) >= 22
+
+
+def test_a_reason_is_only_set_on_an_absent_day():
+    """ck_attendance_reason_only_when_absent: status='Absent' or reason is null."""
+    con = _run_sample()
+    bad = con.execute(
+        "select count(*) from attendance "
+        "where status <> 'Absent' and reason is not null and reason <> ''"
+    ).fetchone()[0]
+    assert bad == 0, f"{bad} Present day(s) carry an absence reason"
