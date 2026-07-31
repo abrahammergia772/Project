@@ -23,6 +23,9 @@ const Router = (() => {
     audit:            { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": true,  "Client": false },
     reports:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": false, "Auditor": true,  "Client": true  },
     chatbot:          { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": false, "Client": true  },
+    // AI Insights surfaces every AI feature, each tab scoped to the role.
+    // Auditors get it (unlike the chatbot) because anomaly detection is theirs.
+    ai_insights:      { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
     documents:        { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
     settings:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
     user_management:  { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": false, "Client": false },

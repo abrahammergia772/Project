@@ -22,6 +22,7 @@ const Shell = (() => {
       { key: "attendance", label: "Attendance", icon: "fa-clipboard-user", href: "attendance.html", badgeKey: "absent_today" },
     ]},
     { label: "AI INTELLIGENCE", items: [
+      { key: "ai_insights", label: "AI Insights", icon: "fa-wand-magic-sparkles", href: "ai_insights.html" },
       { key: "audit", label: "Audit Logs", icon: "fa-shield-halved", href: "audit.html", badgeKey: "audit_flags" },
       { key: "reports", label: "Reports", icon: "fa-file-lines", href: "reports.html" },
       { key: "chatbot", label: "AI Chatbot", icon: "fa-robot", href: "chatbot.html" },
@@ -433,6 +434,10 @@ const Shell = (() => {
     `;
     attachBehaviors();
     Router.showAccessDeniedIfNeeded();
+
+    // Floating AI assistant — mounts itself on every page the user's role
+    // allows, and skips the dedicated chatbot page.
+    if (window.AIAssistant) AIAssistant.mount();
   }
 
   return { render, NAV_GROUPS, refreshNotifications };
