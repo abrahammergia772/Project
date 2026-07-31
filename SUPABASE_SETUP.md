@@ -27,6 +27,47 @@ perfectly well. It just isn't permanent. `/health` now also reports
 
 ---
 
+## Your project's exact values
+
+From your dashboard:
+
+| Field | Value |
+|---|---|
+| Project ID (ref) | `ocfyddxklqephrvxqgfb` |
+| Region | `us-east-2` (East US, Ohio) |
+| Postgres | 17.6.1.155 |
+| Plan | Free |
+
+So your `DATABASE_URL` is this, with only the password to fill in:
+
+```
+postgresql+psycopg://postgres.ocfyddxklqephrvxqgfb:YOURPASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres
+```
+
+And `SUPABASE_URL` is exactly:
+
+```
+https://ocfyddxklqephrvxqgfb.supabase.co
+```
+
+> **Check the pooler prefix.** It is usually `aws-0-`, but some newer projects
+> use `aws-1-`. Both hostnames exist for us-east-2, so don't guess — copy the
+> host from **Project Settings → Database → Connection string → URI** and use
+> whatever it shows.
+
+> **Must use the pooler.** On the free tier the direct host
+> (`db.ocfyddxklqephrvxqgfb.supabase.co`) is IPv6-only, and Render's outbound
+> network is IPv4. Connecting directly will fail with "Network is unreachable";
+> the pooler on port `6543` is IPv4 and works.
+
+### Don't have the database password?
+
+It is **not** your Supabase account password, and it is only shown once at
+project creation. If you don't have it: **Project Settings → Database →
+Database password → Reset database password**. Copy the new one immediately.
+
+---
+
 ## Fix: set `DATABASE_URL`
 
 ### 1. Get the connection string
@@ -70,6 +111,23 @@ psql "$DATABASE_URL" -f buildiq-backend/supabase/migrations/0002_rls_policies.sq
 
 The app also calls `create_all()` at boot, so tables appear even without this —
 but running the migrations gives you the indexes and RLS policies too.
+
+### 3b. Test the string before deploying
+
+Rather than deploying and reading logs, validate it locally:
+
+```bash
+cd buildiq-backend
+pip install -r requirements.txt
+python3 check_db.py "postgresql+psycopg://postgres.ocfyddxklqephrvxqgfb:YOURPASSWORD@aws-0-us-east-2.pooler.supabase.com:6543/postgres"
+```
+
+It checks the URI shape first (driver, host, port, username, password
+encoding), then connects and lists your tables and user count. Each failure
+maps to a specific cause — wrong password, paused project, IPv6-only host,
+unencoded special character — instead of a raw driver traceback.
+
+---
 
 ### 4. Set it on Render
 
