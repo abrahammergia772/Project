@@ -43,6 +43,9 @@ def _client_or_none():
 
 
 def is_available() -> bool:
+    # The OpenAI-compatible path needs no SDK client, only configuration.
+    if settings.uses_openai_compatible:
+        return settings.groq_ready
     return _client_or_none() is not None
 
 
@@ -58,6 +61,12 @@ def complete(
     One-shot completion. Returns the text, or None if Groq is unavailable or
     the call failed — callers must treat None as "use the local fallback".
     """
+    if settings.uses_openai_compatible:
+        return _complete_openai_compatible(
+            system, user, max_tokens=max_tokens,
+            temperature=temperature, json_mode=json_mode,
+        )
+
     client = _client_or_none()
     if client is None:
         return None
@@ -80,6 +89,64 @@ def complete(
     except Exception as exc:
         # Never propagate: an AI outage must not break the request.
         log.warning("Groq completion failed (%s) — using local fallback", exc)
+        return None
+
+
+def _complete_openai_compatible(
+    system: str,
+    user: str,
+    *,
+    max_tokens: int | None = None,
+    temperature: float | None = None,
+    json_mode: bool = False,
+) -> str | None:
+    """Call any provider exposing an OpenAI-style /chat/completions endpoint.
+
+    Uses httpx directly rather than a second SDK: httpx is already a
+    dependency, and the request shape is identical across OpenRouter,
+    Cerebras, Scaleway, Kilo, Google AI Studio's compatibility layer and
+    others. Returns None on ANY failure so the caller falls back to the
+    deterministic heuristics, exactly like the Groq path.
+    """
+    import httpx
+
+    if not settings.groq_ready:
+        return None
+
+    url = settings.AI_BASE_URL.rstrip("/") + "/chat/completions"
+    payload: dict[str, Any] = {
+        "model": settings.AI_MODEL,
+        "messages": [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        "max_tokens": max_tokens or settings.GROQ_MAX_TOKENS,
+        "temperature": settings.GROQ_TEMPERATURE if temperature is None else temperature,
+    }
+    if json_mode:
+        payload["response_format"] = {"type": "json_object"}
+
+    try:
+        resp = httpx.post(
+            url,
+            json=payload,
+            headers={
+                "Authorization": f"Bearer {settings.AI_API_KEY}",
+                "Content-Type": "application/json",
+                # OpenRouter asks for these; harmless elsewhere.
+                "HTTP-Referer": "https://cmsai.onrender.com",
+                "X-Title": "BuildIQ",
+            },
+            timeout=settings.GROQ_TIMEOUT_SECONDS,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        return (data["choices"][0]["message"]["content"] or "").strip() or None
+    except Exception as exc:
+        log.warning(
+            "%s completion failed (%s) — using local fallback",
+            settings.AI_BASE_URL or "AI provider", exc,
+        )
         return None
 
 

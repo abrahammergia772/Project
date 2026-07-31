@@ -204,6 +204,8 @@ def health():
         "database_backend": settings.database_kind,
         "data_persistent": settings.database_is_persistent,
         "ai": "groq" if groq_service.is_available() else "heuristic",
+        # Which provider and model is actually serving AI requests.
+        "ai_provider": settings.ai_provider_label,
         "storage": storage.backend_name(),
     }
 

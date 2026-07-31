@@ -51,6 +51,18 @@ class Settings(BaseSettings):
     MAX_UPLOAD_MB: int = 25
 
     # --- Groq (AI) ---
+    # --- AI provider ---------------------------------------------------
+    # "groq" (default) or "openai_compatible". The second works with any
+    # provider exposing an OpenAI-style /chat/completions endpoint --
+    # OpenRouter, Cerebras, Google AI Studio, Scaleway, Kilo and others --
+    # so you can move to a free tier without touching application code.
+    AI_PROVIDER: str = "groq"
+
+    # Used when AI_PROVIDER=openai_compatible.
+    AI_BASE_URL: str = ""      # e.g. https://openrouter.ai/api/v1
+    AI_API_KEY: str = ""
+    AI_MODEL: str = ""         # e.g. deepseek/deepseek-r1:free
+
     GROQ_API_KEY: str = ""
     GROQ_MODEL: str = "llama-3.3-70b-versatile"
     GROQ_TIMEOUT_SECONDS: float = 20.0
@@ -94,8 +106,31 @@ class Settings(BaseSettings):
         return self.ENV.lower() == "production"
 
     @property
+    def uses_openai_compatible(self) -> bool:
+        return self.AI_PROVIDER.strip().lower() == "openai_compatible"
+
+    @property
     def groq_ready(self) -> bool:
-        return bool(self.AI_ENABLED and self.GROQ_API_KEY)
+        """True when SOME chat provider is configured.
+
+        Name kept for compatibility: is_available(), /health and the tests all
+        read it, and renaming it would touch a dozen call sites for no gain.
+        """
+        if not self.AI_ENABLED:
+            return False
+        if self.uses_openai_compatible:
+            return bool(self.AI_BASE_URL and self.AI_API_KEY and self.AI_MODEL)
+        return bool(self.GROQ_API_KEY)
+
+    @property
+    def ai_provider_label(self) -> str:
+        """Shown by /health so you can see which provider is actually live."""
+        if not self.groq_ready:
+            return "heuristic"
+        if self.uses_openai_compatible:
+            host = self.AI_BASE_URL.split("//")[-1].split("/")[0]
+            return f"{host} ({self.AI_MODEL})"
+        return f"groq ({self.GROQ_MODEL})"
 
     def validate_database(self) -> None:
         """Refuse to run on anything but Supabase Postgres.
