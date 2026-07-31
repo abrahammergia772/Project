@@ -71,7 +71,7 @@ const AIInsightsPage = (() => {
 
     document.getElementById("askAiBtn").addEventListener("click", () => {
       if (window.AIAssistant) AIAssistant.open();
-      else window.location.href = "chatbot.html";
+      else window.location.href = "chatbot";
     });
 
     Utils.qsa(".tab", document.getElementById("aiTabs")).forEach(tab =>
@@ -359,7 +359,7 @@ const AIInsightsPage = (() => {
           <div class="section-title"><i class="fa-solid fa-ranking-star"></i> Ranked queue (${ranked.length})</div>
           <div class="ai-task-list">
             ${ranked.slice(0, 10).map(t => `
-              <a class="ai-task-row" href="tasks.html">
+              <a class="ai-task-row" href="tasks">
                 <span class="ai-task-score" style="--tone:${scoreTone(t.ai_score)};">${t.ai_score}</span>
                 <span class="ai-task-main">
                   <b>${Utils.escapeHtml(t.title)}</b>
@@ -373,7 +373,7 @@ const AIInsightsPage = (() => {
         <div class="card">
           <div class="flex items-center justify-between" style="margin-bottom:12px;">
             <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-calendar-week"></i> Suggested week</div>
-            <a href="tasks.html" class="btn btn-outline btn-sm">Open scheduler</a>
+            <a href="tasks" class="btn btn-outline btn-sm">Open scheduler</a>
           </div>
           <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px;">${placed} slot${placed === 1 ? "" : "s"} filled from your ranked queue.</p>
           <div class="ai-week">
@@ -471,7 +471,7 @@ const AIInsightsPage = (() => {
           const bad = all.filter(l => l.is_flagged).length;
           const clean = all.length ? Math.round(100 - (bad / all.length) * 100) : 100;
           return `
-          <a class="ai-type-card" href="audit.html" style="--tone:var(--${t.color});">
+          <a class="ai-type-card" href="audit" style="--tone:var(--${t.color});">
             <span class="ai-type-icon"><i class="fa-solid ${t.icon}"></i></span>
             <b>${Utils.escapeHtml(t.label)}</b>
             <small>${Utils.escapeHtml(t.ml_role)}</small>
@@ -488,12 +488,12 @@ const AIInsightsPage = (() => {
       <div class="card" style="margin-top:18px;">
         <div class="flex items-center justify-between" style="margin-bottom:12px;">
           <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-triangle-exclamation"></i> Highest-scoring anomalies</div>
-          <a href="audit.html" class="btn btn-outline btn-sm">Open Audit Intelligence</a>
+          <a href="audit" class="btn btn-outline btn-sm">Open Audit Intelligence</a>
         </div>
         ${flagged.length ? `
           <div class="ai-task-list">
             ${flagged.sort((a, b) => b.anomaly_score - a.anomaly_score).slice(0, 6).map(l => `
-              <a class="ai-task-row" href="audit.html">
+              <a class="ai-task-row" href="audit">
                 <span class="ai-task-score" style="--tone:${l.anomaly_score > 0.85 ? "var(--red)" : "var(--accent)"};">${Math.round(l.anomaly_score * 100)}</span>
                 <span class="ai-task-main">
                   <b>${Utils.escapeHtml(l.user)} — ${Utils.escapeHtml(l.action_label || l.action)}</b>

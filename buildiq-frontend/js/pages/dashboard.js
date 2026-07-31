@@ -12,13 +12,13 @@ const DashboardPage = (() => {
     const s = DataStore.stats || {};
     if (role === "Super Admin" || role === "General Manager") {
       return [
-        Components.createStatCard("Active Projects", s.active_projects, 8, "accent", "fa-diagram-project", { href: "projects.html?status=In+Progress", hint: "View projects" }),
-        Components.createStatCard("Total Members", s.total_members, 4, "blue", "fa-users", { href: "members.html", hint: "View members" }),
-        Components.createStatCard("High Risk Projects", s.high_risk, -12, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
-        Components.createStatCard("Open Complaints", s.open_complaints, 3, "yellow", "fa-comments", { href: "complaints.html?status=pending", hint: "Triage now" }),
+        Components.createStatCard("Active Projects", s.active_projects, 8, "accent", "fa-diagram-project", { href: "projects?status=In+Progress", hint: "View projects" }),
+        Components.createStatCard("Total Members", s.total_members, 4, "blue", "fa-users", { href: "members", hint: "View members" }),
+        Components.createStatCard("High Risk Projects", s.high_risk, -12, "red", "fa-triangle-exclamation", { href: "projects?risk=HIGH", hint: "Review risks" }),
+        Components.createStatCard("Open Complaints", s.open_complaints, 3, "yellow", "fa-comments", { href: "complaints?status=pending", hint: "Triage now" }),
         role === "Super Admin"
-          ? Components.createStatCard("Audit Flags", s.audit_flags, -5, "purple", "fa-shield-halved", { href: "audit.html", hint: "Investigate" })
-          : Components.createStatCard("Departments", DataStore.departments.length, null, "cyan", "fa-building", { href: "departments.html", hint: "View departments" }),
+          ? Components.createStatCard("Audit Flags", s.audit_flags, -5, "purple", "fa-shield-halved", { href: "audit", hint: "Investigate" })
+          : Components.createStatCard("Departments", DataStore.departments.length, null, "cyan", "fa-building", { href: "departments", hint: "View departments" }),
       ];
     }
     if (role === "Department Manager") {
@@ -26,10 +26,10 @@ const DashboardPage = (() => {
       const deptComplaints = DataStore.complaints.filter(c => c.department === user.department);
       const deptMembers = DataStore.members.filter(m => m.department === user.department);
       return [
-        Components.createStatCard("Dept. Projects", deptProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
-        Components.createStatCard("Team Members", deptMembers.length, null, "blue", "fa-users", { href: "members.html", hint: "View team" }),
-        Components.createStatCard("Open Complaints", deptComplaints.filter(c=>c.status!=="resolved").length, null, "yellow", "fa-comments", { href: "complaints.html?status=pending", hint: "Resolve" }),
-        Components.createStatCard("High Risk", deptProjects.filter(p=>p.delay_risk==="HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
+        Components.createStatCard("Dept. Projects", deptProjects.length, null, "accent", "fa-diagram-project", { href: "projects", hint: "View projects" }),
+        Components.createStatCard("Team Members", deptMembers.length, null, "blue", "fa-users", { href: "members", hint: "View team" }),
+        Components.createStatCard("Open Complaints", deptComplaints.filter(c=>c.status!=="resolved").length, null, "yellow", "fa-comments", { href: "complaints?status=pending", hint: "Resolve" }),
+        Components.createStatCard("High Risk", deptProjects.filter(p=>p.delay_risk==="HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects?risk=HIGH", hint: "Review risks" }),
       ];
     }
     if (role === "Project Manager") {
@@ -41,38 +41,38 @@ const DashboardPage = (() => {
       const avgProgress = mine.length ? Math.round(mine.reduce((s, p) => s + p.progress, 0) / mine.length) : 0;
       const spend = mine.reduce((s, p) => s + (p.materials_total_cost || 0), 0);
       return [
-        Components.createStatCard("My Projects", mine.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
-        Components.createStatCard("Avg. Progress", `${avgProgress}%`, null, "blue", "fa-chart-line", { href: "projects.html", hint: "See progress" }),
-        Components.createStatCard("At Risk", mine.filter(p => p.delay_risk === "HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects.html?risk=HIGH", hint: "Review risks" }),
-        Components.createStatCard("Team Size", team.length, null, "cyan", "fa-users", { href: "members.html", hint: "View team" }),
-        Components.createStatCard("Overdue Tasks", overdue, null, "yellow", "fa-clock", { href: "tasks.html", hint: "Open tasks" }),
-        Components.createStatCard("Materials Spend", Utils.currency(spend), null, "purple", "fa-boxes-stacked", { href: "projects.html", hint: "View costs" }),
+        Components.createStatCard("My Projects", mine.length, null, "accent", "fa-diagram-project", { href: "projects", hint: "View projects" }),
+        Components.createStatCard("Avg. Progress", `${avgProgress}%`, null, "blue", "fa-chart-line", { href: "projects", hint: "See progress" }),
+        Components.createStatCard("At Risk", mine.filter(p => p.delay_risk === "HIGH").length, null, "red", "fa-triangle-exclamation", { href: "projects?risk=HIGH", hint: "Review risks" }),
+        Components.createStatCard("Team Size", team.length, null, "cyan", "fa-users", { href: "members", hint: "View team" }),
+        Components.createStatCard("Overdue Tasks", overdue, null, "yellow", "fa-clock", { href: "tasks", hint: "Open tasks" }),
+        Components.createStatCard("Materials Spend", Utils.currency(spend), null, "purple", "fa-boxes-stacked", { href: "projects", hint: "View costs" }),
       ];
     }
     if (role === "Engineer") {
       const myTasks = DataStore.tasks.filter(t => t.assignee_id === user.id);
       const overdue = myTasks.filter(t => t.status !== "Done" && new Date(t.due_date) < new Date()).length;
       return [
-        Components.createStatCard("Open Tasks", myTasks.filter(t=>t.status!=="Done").length, null, "accent", "fa-list-check", { href: "tasks.html", hint: "Open tasks" }),
-        Components.createStatCard("My Projects", Roles.visibleProjects(user, DataStore.projects).length, null, "blue", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
-        Components.createStatCard("Overdue", overdue, null, "red", "fa-clock", { href: "tasks.html", hint: "Catch up" }),
+        Components.createStatCard("Open Tasks", myTasks.filter(t=>t.status!=="Done").length, null, "accent", "fa-list-check", { href: "tasks", hint: "Open tasks" }),
+        Components.createStatCard("My Projects", Roles.visibleProjects(user, DataStore.projects).length, null, "blue", "fa-diagram-project", { href: "projects", hint: "View projects" }),
+        Components.createStatCard("Overdue", overdue, null, "red", "fa-clock", { href: "tasks", hint: "Catch up" }),
       ];
     }
     if (role === "Client") {
       const myProjects = Roles.visibleProjects(user, DataStore.projects);
       const myComplaints = Roles.visibleComplaints(user, DataStore.complaints);
       return [
-        Components.createStatCard("My Projects", myProjects.length, null, "accent", "fa-diagram-project", { href: "projects.html", hint: "View projects" }),
-        Components.createStatCard("Avg. Progress", myProjects.length ? Math.round(myProjects.reduce((s,p)=>s+p.progress,0)/myProjects.length) + "%" : "—", null, "blue", "fa-chart-line", { href: "projects.html", hint: "See progress" }),
-        Components.createStatCard("My Complaints", myComplaints.length, null, "yellow", "fa-comments", { href: "complaints.html", hint: "Track complaints" }),
+        Components.createStatCard("My Projects", myProjects.length, null, "accent", "fa-diagram-project", { href: "projects", hint: "View projects" }),
+        Components.createStatCard("Avg. Progress", myProjects.length ? Math.round(myProjects.reduce((s,p)=>s+p.progress,0)/myProjects.length) + "%" : "—", null, "blue", "fa-chart-line", { href: "projects", hint: "See progress" }),
+        Components.createStatCard("My Complaints", myComplaints.length, null, "yellow", "fa-comments", { href: "complaints", hint: "Track complaints" }),
       ];
     }
     // Auditor
     return [
-      Components.createStatCard("Flagged Today", s.audit_flags, 12, "red", "fa-triangle-exclamation", { href: "audit.html", hint: "Investigate" }),
-      Components.createStatCard("Under Review", Math.round(s.audit_flags*1.6), null, "yellow", "fa-magnifying-glass", { href: "audit.html", hint: "Review queue" }),
-      Components.createStatCard("Cleared", 128, null, "green", "fa-circle-check", { href: "audit.html", hint: "View log" }),
-      Components.createStatCard("AI Accuracy", "94%", null, "purple", "fa-brain", { href: "audit.html", hint: "Model stats" }),
+      Components.createStatCard("Flagged Today", s.audit_flags, 12, "red", "fa-triangle-exclamation", { href: "audit", hint: "Investigate" }),
+      Components.createStatCard("Under Review", Math.round(s.audit_flags*1.6), null, "yellow", "fa-magnifying-glass", { href: "audit", hint: "Review queue" }),
+      Components.createStatCard("Cleared", 128, null, "green", "fa-circle-check", { href: "audit", hint: "View log" }),
+      Components.createStatCard("AI Accuracy", "94%", null, "purple", "fa-brain", { href: "audit", hint: "Model stats" }),
     ];
   }
 
@@ -140,7 +140,7 @@ const DashboardPage = (() => {
       <div class="card" style="margin-bottom:20px;">
         <div class="flex items-center justify-between" style="margin-bottom:14px;">
           <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-diagram-project"></i> Projects I Manage</div>
-          <a href="projects.html" class="btn btn-outline btn-sm">Open Projects</a>
+          <a href="projects" class="btn btn-outline btn-sm">Open Projects</a>
         </div>
         <div id="pmProjectsList" class="flex-col gap-12"></div>
       </div>
@@ -158,7 +158,7 @@ const DashboardPage = (() => {
         <div class="card">
           <div class="flex items-center justify-between" style="margin-bottom:14px;">
             <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-ranking-star"></i> Urgent Team Tasks</div>
-            <a href="tasks.html" class="btn btn-outline btn-sm">Assign</a>
+            <a href="tasks" class="btn btn-outline btn-sm">Assign</a>
           </div>
           <div id="pmTasksList" class="flex-col gap-8"></div>
         </div>
@@ -237,7 +237,7 @@ const DashboardPage = (() => {
     const urgent = AIEngine.prioritizeTasks(
       DataStore.tasks.filter(t => ids.has(t.project_id) && t.status !== "Done")).slice(0, 5);
     document.getElementById("pmTasksList").innerHTML = urgent.length ? urgent.map(t => `
-      <a class="dash-row" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
+      <a class="dash-row" href="tasks" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
         ${Components.createBadge(t.ai_priority, Utils.priorityBadgeType(t.ai_priority))}
         <div style="flex:1; min-width:0;">
           <div style="font-size:13px; font-weight:600;">${Utils.escapeHtml(t.title)}</div>
@@ -249,7 +249,7 @@ const DashboardPage = (() => {
     // Complaints raised against these projects
     document.getElementById("pmComplaintsList").innerHTML = openComplaints.length
       ? openComplaints.slice(0, 5).map(c => `
-        <a class="dash-row" href="complaints.html" aria-label="Open complaint ${Utils.escapeHtml(c.id)}">
+        <a class="dash-row" href="complaints" aria-label="Open complaint ${Utils.escapeHtml(c.id)}">
           <div style="min-width:0; flex:1;">
             <b>${Utils.escapeHtml(c.id)}</b> — ${Utils.escapeHtml(c.category)}
             <div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(c.project || "")}</div>
@@ -266,7 +266,7 @@ const DashboardPage = (() => {
       <div class="card" style="margin-bottom:20px;">
         <div class="flex items-center justify-between" style="margin-bottom:14px;">
           <div class="section-title" style="margin-bottom:0;"><i class="fa-solid fa-ranking-star"></i> My AI-Prioritized Tasks</div>
-          <a href="tasks.html" class="btn btn-outline btn-sm">Open Tasks & Schedule</a>
+          <a href="tasks" class="btn btn-outline btn-sm">Open Tasks & Schedule</a>
         </div>
         <div id="topTasksList" class="flex-col gap-8"></div>
       </div>
@@ -301,7 +301,7 @@ const DashboardPage = (() => {
         <div class="card">
           <div class="section-title"><i class="fa-solid fa-file-lines"></i> Latest Report</div>
           <p style="font-size:13px; color:var(--text-secondary); margin-bottom:14px;">Generate an up-to-date AI status report for your project any time.</p>
-          <a href="reports.html" class="btn btn-primary btn-block"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Project Report</a>
+          <a href="reports" class="btn btn-primary btn-block"><i class="fa-solid fa-wand-magic-sparkles"></i> Generate Project Report</a>
         </div>
       </div>`;
   }
@@ -429,7 +429,7 @@ const DashboardPage = (() => {
   async function fillEngineer(user) {
     const myTasks = AIEngine.prioritizeTasks(DataStore.tasks.filter(t => t.assignee_id === user.id && t.status !== "Done")).slice(0,5);
     document.getElementById("topTasksList").innerHTML = myTasks.length ? myTasks.map(t => `
-      <a class="dash-row boxed" href="tasks.html" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
+      <a class="dash-row boxed" href="tasks" aria-label="Open task: ${Utils.escapeHtml(t.title)}">
         <div style="flex:1; min-width:0;"><div style="font-weight:600; font-size:13px;">${Utils.escapeHtml(t.title)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(t.project_title)} · Due ${Utils.formatDate(t.due_date)}</div></div>
         ${Components.createBadge(t.ai_priority, Utils.priorityBadgeType(t.ai_priority))}
         <i class="fa-solid fa-chevron-right dash-row-go"></i>

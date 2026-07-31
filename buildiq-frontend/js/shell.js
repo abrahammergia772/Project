@@ -8,28 +8,28 @@ const Shell = (() => {
 
   const NAV_GROUPS = [
     { label: "OVERVIEW", items: [
-      { key: "dashboard", label: "Dashboard", icon: "fa-gauge-high", href: "dashboard.html" },
+      { key: "dashboard", label: "Dashboard", icon: "fa-gauge-high", href: "dashboard" },
     ]},
     { label: "ORGANIZATION", items: [
-      { key: "members", label: "Members", icon: "fa-users", href: "members.html" },
-      { key: "departments", label: "Departments", icon: "fa-building", href: "departments.html" },
-      { key: "documents", label: "Documents", icon: "fa-folder-open", href: "documents.html" },
+      { key: "members", label: "Members", icon: "fa-users", href: "members" },
+      { key: "departments", label: "Departments", icon: "fa-building", href: "departments" },
+      { key: "documents", label: "Documents", icon: "fa-folder-open", href: "documents" },
     ]},
     { label: "OPERATIONS", items: [
-      { key: "projects", label: "Projects", icon: "fa-diagram-project", href: "projects.html" },
-      { key: "tasks", label: "Tasks", icon: "fa-list-check", href: "tasks.html" },
-      { key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", href: "complaints.html", badgeKey: "open_complaints" },
-      { key: "attendance", label: "Attendance", icon: "fa-clipboard-user", href: "attendance.html", badgeKey: "absent_today" },
+      { key: "projects", label: "Projects", icon: "fa-diagram-project", href: "projects" },
+      { key: "tasks", label: "Tasks", icon: "fa-list-check", href: "tasks" },
+      { key: "complaints", label: "Complaints", icon: "fa-triangle-exclamation", href: "complaints", badgeKey: "open_complaints" },
+      { key: "attendance", label: "Attendance", icon: "fa-clipboard-user", href: "attendance", badgeKey: "absent_today" },
     ]},
     { label: "AI INTELLIGENCE", items: [
-      { key: "ai_insights", label: "AI Insights", icon: "fa-wand-magic-sparkles", href: "ai_insights.html" },
-      { key: "audit", label: "Audit Logs", icon: "fa-shield-halved", href: "audit.html", badgeKey: "audit_flags" },
-      { key: "reports", label: "Reports", icon: "fa-file-lines", href: "reports.html" },
-      { key: "chatbot", label: "AI Chatbot", icon: "fa-robot", href: "chatbot.html" },
+      { key: "ai_insights", label: "AI Insights", icon: "fa-wand-magic-sparkles", href: "ai_insights" },
+      { key: "audit", label: "Audit Logs", icon: "fa-shield-halved", href: "audit", badgeKey: "audit_flags" },
+      { key: "reports", label: "Reports", icon: "fa-file-lines", href: "reports" },
+      { key: "chatbot", label: "AI Chatbot", icon: "fa-robot", href: "chatbot" },
     ]},
     { label: "SYSTEM", items: [
-      { key: "settings", label: "Settings", icon: "fa-gear", href: "settings.html" },
-      { key: "user_management", label: "User Management", icon: "fa-user-shield", href: "user_management.html" },
+      { key: "settings", label: "Settings", icon: "fa-gear", href: "settings" },
+      { key: "user_management", label: "User Management", icon: "fa-user-shield", href: "user_management" },
     ]},
   ];
 
@@ -77,7 +77,7 @@ const Shell = (() => {
       <aside class="sidebar" id="sidebar">
         <button class="sidebar-collapse-btn" id="sidebarCollapseBtn" aria-label="Toggle sidebar"><i class="fa-solid fa-chevron-left"></i></button>
         <div class="sidebar-header">
-          <a href="dashboard.html" class="sidebar-logo">
+          <a href="dashboard" class="sidebar-logo">
             <div class="logo-mark"><i class="fa-solid fa-building-columns"></i></div>
             <span class="logo-text">BuildIQ</span>
             <span class="version-badge">v2.1</span>
@@ -220,7 +220,7 @@ const Shell = (() => {
     // User menu (simple dropdown → toast for demo)
     const userMenuBtn = document.getElementById("userMenuBtn");
     if (userMenuBtn) userMenuBtn.addEventListener("click", () => {
-      window.location.href = "settings.html";
+      window.location.href = "settings";
     });
 
     // Role switcher (only rendered when the person holds more than one role)
@@ -398,15 +398,15 @@ const Shell = (() => {
       const sections = [];
       if (data.members?.length) sections.push(`
         <div class="spotlight-group-label">Members</div>
-        ${data.members.map(m => `<a href="members.html" class="spotlight-item">${Components.createAvatar(m.full_name,"sm")} <span>${Utils.escapeHtml(m.full_name)}</span> ${Components.createBadge(m.role, Utils.roleColor(m.role))}</a>`).join("")}
+        ${data.members.map(m => `<a href="members" class="spotlight-item">${Components.createAvatar(m.full_name,"sm")} <span>${Utils.escapeHtml(m.full_name)}</span> ${Components.createBadge(m.role, Utils.roleColor(m.role))}</a>`).join("")}
       `);
       if (data.projects?.length) sections.push(`
         <div class="spotlight-group-label">Projects</div>
-        ${data.projects.map(p => `<a href="projects.html" class="spotlight-item"><i class="fa-solid fa-diagram-project" style="color:var(--text-muted)"></i> <span>${Utils.escapeHtml(p.title)}</span> ${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}</a>`).join("")}
+        ${data.projects.map(p => `<a href="projects" class="spotlight-item"><i class="fa-solid fa-diagram-project" style="color:var(--text-muted)"></i> <span>${Utils.escapeHtml(p.title)}</span> ${Components.createBadge(p.delay_risk, Utils.riskBadgeType(p.delay_risk))}</a>`).join("")}
       `);
       if (data.complaints?.length) sections.push(`
         <div class="spotlight-group-label">Complaints</div>
-        ${data.complaints.map(c => `<a href="complaints.html" class="spotlight-item"><i class="fa-solid fa-triangle-exclamation" style="color:var(--text-muted)"></i> <span>${Utils.escapeHtml(c.category)}</span> ${Components.createBadge(c.severity, Utils.severityColor(c.severity))}</a>`).join("")}
+        ${data.complaints.map(c => `<a href="complaints" class="spotlight-item"><i class="fa-solid fa-triangle-exclamation" style="color:var(--text-muted)"></i> <span>${Utils.escapeHtml(c.category)}</span> ${Components.createBadge(c.severity, Utils.severityColor(c.severity))}</a>`).join("")}
       `);
       results.innerHTML = sections.length ? sections.join("") : `<div style="padding:24px; text-align:center; color:var(--text-muted); font-size:13px;">No results found.</div>`;
     }, 250);

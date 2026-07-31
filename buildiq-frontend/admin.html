@@ -108,7 +108,7 @@
 
     <div class="admin-foot">
       <i class="fa-solid fa-lock"></i>
-      Not an administrator? <a href="index.html">Return to staff sign-in</a>
+      Not an administrator? <a href="index">Return to staff sign-in</a>
     </div>
 
   </div>
@@ -148,12 +148,12 @@
     const u = Auth.getUser();
     if (u && Roles.usesPrivilegedLogin(u.role)) {
       Components.createToast(`Verified as ${u.role}. Opening console...`, "success");
-      setTimeout(() => window.location.href = "dashboard.html", 500);
+      setTimeout(() => window.location.href = "dashboard", 500);
       return;
     }
     // A non-privileged session must never be silently upgraded by URL.
     if (isHandoff) Auth.logout({ silent: true });
-    else { window.location.href = "dashboard.html"; return; }
+    else { window.location.href = "dashboard"; return; }
   }
 
   if (isHandoff) {
@@ -189,7 +189,7 @@
         Auth.logout({ silent: true });
         showError("This portal is for administrator accounts only. Redirecting you to staff sign-in...");
         if (btn) { btn.disabled = false; btn.innerHTML = restoreHtml; }
-        setTimeout(() => window.location.href = "index.html", 1600);
+        setTimeout(() => window.location.href = "index", 1600);
         return;
       }
 
@@ -203,7 +203,7 @@
       }
 
       Components.createToast(`Welcome, ${user.name}.`, "success");
-      setTimeout(() => window.location.href = "dashboard.html", 500);
+      setTimeout(() => window.location.href = "dashboard", 500);
     } catch (err) {
       if (btn) { btn.disabled = false; btn.innerHTML = restoreHtml; }
       // Deliberately vague: never reveal whether the address exists.
@@ -235,7 +235,7 @@
   document.getElementById("adminForgot").addEventListener("click", (e) => {
     e.preventDefault();
     const email = document.getElementById("adminEmail").value.trim();
-    window.location.href = "index.html?forgot=1" + (email ? `&email=${encodeURIComponent(email)}` : "");
+    window.location.href = "index?forgot=1" + (email ? `&email=${encodeURIComponent(email)}` : "");
   });
 
 })();

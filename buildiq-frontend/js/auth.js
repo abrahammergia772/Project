@@ -50,8 +50,8 @@ const Auth = (() => {
   // unlisted administrator portal, so send them back there rather than
   // dumping them on the public staff page. Read the role BEFORE the session
   // is cleared, since that is the only place it is recorded.
-  const STAFF_LOGIN = "index.html";
-  const ADMIN_LOGIN = "admin.html";
+  const STAFF_LOGIN = "index";
+  const ADMIN_LOGIN = "admin";
 
   function loginPageFor(user) {
     const u = user || getUser();

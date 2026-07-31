@@ -430,7 +430,7 @@
 (function() {
   // If already logged in, go straight to dashboard
   if (Auth.isLoggedIn()) {
-    window.location.href = "dashboard.html";
+    window.location.href = "dashboard";
     return;
   }
 
@@ -692,11 +692,11 @@
       // admin.html picks it up and completes the sign-in there.
       if (Roles.usesPrivilegedLogin(user.role)) {
         Components.createToast(`${user.role} accounts sign in via the administrator portal. Redirecting...`, "info");
-        setTimeout(() => window.location.href = "admin.html?handoff=1", 900);
+        setTimeout(() => window.location.href = "admin?handoff=1", 900);
         return;
       }
       Components.createToast(`Welcome back, ${user.name}!`, "success");
-      setTimeout(() => window.location.href = "dashboard.html", 500);
+      setTimeout(() => window.location.href = "dashboard", 500);
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = `<span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>`;
@@ -714,7 +714,7 @@
       try {
         const user = await Auth.login(demoEmail, "Demo1234!");
         Components.createToast(`Welcome, ${user.name}!`, "success");
-        setTimeout(() => window.location.href = "dashboard.html", 400);
+        setTimeout(() => window.location.href = "dashboard", 400);
       } catch {}
     });
   });
@@ -953,7 +953,7 @@
     try {
       const user = await Auth.signup(payload);
       Components.createToast(`Account created! Welcome, ${user.name}.`, "success");
-      setTimeout(() => window.location.href = "dashboard.html", 600);
+      setTimeout(() => window.location.href = "dashboard", 600);
     } catch (err) {
       btn.disabled = false;
       btn.textContent = "Create Account";

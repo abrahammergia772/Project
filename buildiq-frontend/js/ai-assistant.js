@@ -62,7 +62,7 @@ const AIAssistant = (() => {
             <button class="icon-btn" id="aiClearBtn" aria-label="Clear conversation" title="Clear conversation">
               <i class="fa-solid fa-eraser"></i>
             </button>
-            <a href="chatbot.html" class="icon-btn" aria-label="Open full chat page" title="Open full page">
+            <a href="chatbot" class="icon-btn" aria-label="Open full chat page" title="Open full page">
               <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
             </a>
             <button class="icon-btn" id="aiCloseBtn" aria-label="Close assistant" title="Close">

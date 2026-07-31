@@ -183,7 +183,7 @@ const ComplaintsPage = (() => {
       AppEvents.notify({
         title: "Your complaint was resolved",
         body: `${c.id} — ${c.category} has been marked resolved.`,
-        icon: "fa-circle-check", type: "success", link: "complaints.html",
+        icon: "fa-circle-check", type: "success", link: "complaints",
         target: { user_ids: [c.submitted_by] },
       });
       Components.createToast(`${c.id} marked as resolved.`, "success");
@@ -228,7 +228,7 @@ const ComplaintsPage = (() => {
       AppEvents.notify({
         title: "New complaint submitted",
         body: `${newComplaint.id} — ${newComplaint.category} on ${newComplaint.project}.`,
-        icon: "fa-triangle-exclamation", type: "warning", link: "complaints.html",
+        icon: "fa-triangle-exclamation", type: "warning", link: "complaints",
         target: { roles: ["Super Admin", "General Manager"], departments: [newComplaint.department] },
       });
       visible = Roles.visibleComplaints(user, allComplaints);

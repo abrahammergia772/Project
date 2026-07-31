@@ -25,7 +25,18 @@ services:
     # Multi-page app, not a SPA: each .html is served by filename, so no
     # rewrite/fallback rule is needed. A SPA-style catch-all would break
     # admin.html and the other pages.
+    # Serve /chatbot as well as /chatbot.html. Render already resolves the
+    # extensionless form for static sites; these rules make it explicit and
+    # keep it working if that default ever changes.
+    routes:
+      - type: rewrite
+        source: /:page
+        destination: /:page.html
     headers:
       - path: /*
         name: Cache-Control
         value: public, max-age=0, must-revalidate
+      # Authenticated pages are client-side guarded; keep them out of search.
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex

@@ -457,7 +457,7 @@ const AttendancePage = (() => {
       AppEvents.notify({
         title: `${absentees.length} absence${absentees.length > 1 ? "s" : ""} recorded`,
         body: `${selectedDate}: ${absentees.slice(0, 3).map(p => p.name).join(", ")}${absentees.length > 3 ? ` +${absentees.length - 3} more` : ""}.`,
-        icon: "fa-user-slash", type: "warning", link: "attendance.html",
+        icon: "fa-user-slash", type: "warning", link: "attendance",
         target: { roles: ["Super Admin", "General Manager"], departments: [Roles.WORKFORCE_DEPT] },
       });
     }
@@ -474,7 +474,7 @@ const AttendancePage = (() => {
     el.innerHTML = `
       <div class="flex items-center justify-between" style="margin-bottom:14px;">
         <p style="font-size:12.5px; color:var(--text-muted); max-width:560px;">Ranked by an AI absence-risk score combining 30-day absence rate, recent (7-day) absences, and late-arrival frequency.</p>
-        <a href="reports.html" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-lines"></i> Generate Attendance Report</a>
+        <a href="reports" class="btn btn-secondary btn-sm"><i class="fa-solid fa-file-lines"></i> Generate Attendance Report</a>
       </div>
       <div class="ranking-list">${ranked.map((r, i) => `
         <div class="ranking-row">

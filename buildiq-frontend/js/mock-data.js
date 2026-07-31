@@ -994,39 +994,39 @@ const MockData = (() => {
     addNotification({
       title: "New complaint awaiting triage",
       body: `${openComplaint.id} — ${openComplaint.category} on ${openComplaint.project}.`,
-      icon: "fa-triangle-exclamation", type: "warning", link: "complaints.html",
+      icon: "fa-triangle-exclamation", type: "warning", link: "complaints",
       target: { roles: ["Super Admin", "General Manager"], departments: [openComplaint.department] },
     });
     addNotification({
       title: "Project flagged HIGH delay risk",
       body: `${riskyProject.title} is ${riskyProject.progress}% complete against an expected ${riskyProject.expected_progress}%.`,
-      icon: "fa-diagram-project", type: "error", link: "projects.html",
+      icon: "fa-diagram-project", type: "error", link: "projects",
       target: { roles: ["Super Admin", "General Manager"], departments: [riskyProject.department] },
     });
     if (flagged) {
       addNotification({
         title: "Audit anomaly detected",
         body: `${flagged.user} — ${flagged.action.replace(/_/g, " ").toLowerCase()} scored ${Math.round(flagged.anomaly_score * 100)}/100.`,
-        icon: "fa-shield-halved", type: "error", link: "audit.html",
+        icon: "fa-shield-halved", type: "error", link: "audit",
         target: { roles: ["Super Admin", "General Manager", "Auditor"] },
       });
     }
     addNotification({
       title: "Attendance not yet recorded",
       body: "Today's attendance has not been submitted for all tracked workers.",
-      icon: "fa-clipboard-user", type: "info", link: "attendance.html",
+      icon: "fa-clipboard-user", type: "info", link: "attendance",
       target: { roles: ["Super Admin", "General Manager"], departments: [workforceMgr ? workforceMgr.department : "Workforce & Attendance"] },
     });
     addNotification({
       title: "Tasks due this week",
       body: "You have open tasks ranked CRITICAL by the AI prioritizer.",
-      icon: "fa-list-check", type: "warning", link: "tasks.html",
+      icon: "fa-list-check", type: "warning", link: "tasks",
       target: { user_ids: ["mem_6"] },
     });
     addNotification({
       title: "Update on your complaint",
       body: "CMP-2001 has been received and routed to Site Operations.",
-      icon: "fa-comment-dots", type: "info", link: "complaints.html",
+      icon: "fa-comment-dots", type: "info", link: "complaints",
       target: { user_ids: ["client_1"] },
     });
   })();

@@ -34,7 +34,7 @@ const API = (() => {
 
       if (res.status === 401) {
         Auth.logout({ silent: true });
-        window.location.href = "index.html";
+        window.location.href = "index";
         throw new Error("Unauthorized");
       }
 
@@ -331,7 +331,7 @@ const API = (() => {
         MockData.addNotification({
           title: "You were made project manager",
           body: `${user.name} assigned you to manage "${project.title}".`,
-          icon: "fa-diagram-project", type: "info", link: "projects.html",
+          icon: "fa-diagram-project", type: "info", link: "projects",
           target: { user_ids: [manager.id] },
         });
       }
@@ -349,7 +349,7 @@ const API = (() => {
         MockData.addNotification({
           title: "You were appointed department head",
           body: `${user.name} appointed you head of ${res.department.name}.`,
-          icon: "fa-user-tie", type: "success", link: "departments.html",
+          icon: "fa-user-tie", type: "success", link: "departments",
           target: { user_ids: [res.department.head_id] },
         });
       }
@@ -386,7 +386,7 @@ const API = (() => {
       MockData.addNotification({
         title: "You were made project manager",
         body: `${user.name} assigned you to manage "${res.project.title}".`,
-        icon: "fa-diagram-project", type: "info", link: "projects.html",
+        icon: "fa-diagram-project", type: "info", link: "projects",
         target: { user_ids: [memberId] },
       });
       return res.project;
@@ -402,7 +402,7 @@ const API = (() => {
       MockData.addNotification({
         title: "You were appointed department head",
         body: `${user.name} appointed you head of ${departmentName}.`,
-        icon: "fa-user-tie", type: "success", link: "departments.html",
+        icon: "fa-user-tie", type: "success", link: "departments",
         target: { user_ids: [memberId] },
       });
       return res.department;
@@ -418,7 +418,7 @@ const API = (() => {
       MockData.addNotification({
         title: "Your department changed",
         body: `${user.name} moved you to ${departmentName}.`,
-        icon: "fa-building", type: "info", link: "departments.html",
+        icon: "fa-building", type: "info", link: "departments",
         target: { user_ids: [memberId] },
       });
       return res.member;
@@ -481,7 +481,7 @@ const API = (() => {
       MockData.addNotification({
         title: "Absence reason submitted",
         body: `${user.name} explained their absence on ${date} (${res.record.reason_category}).`,
-        icon: "fa-comment-dots", type: "info", link: "attendance.html",
+        icon: "fa-comment-dots", type: "info", link: "attendance",
         target: {
           roles: ["Super Admin", "General Manager"],
           departments: [res.record.department, Roles.WORKFORCE_DEPT].filter(Boolean),
@@ -505,7 +505,7 @@ const API = (() => {
         body: `Your reason for ${date} was ${payload.decision.toLowerCase()} by ${user.name}.`,
         icon: payload.decision === "Accepted" ? "fa-circle-check" : "fa-circle-xmark",
         type: payload.decision === "Accepted" ? "success" : "error",
-        link: "attendance.html",
+        link: "attendance",
         target: { user_ids: [personId] },
       });
       return res.record;
@@ -547,7 +547,7 @@ const API = (() => {
       MockData.addNotification({
         title: "New task assigned to you",
         body: `${user.name} (${user.role}) assigned "${task.title}" — due ${new Date(task.due_date).toDateString()}.`,
-        icon: "fa-list-check", type: "info", link: "tasks.html",
+        icon: "fa-list-check", type: "info", link: "tasks",
         target: { user_ids: [target.id] },
       });
       return task;

@@ -14,6 +14,12 @@
 <link rel="stylesheet" href="css/ai-assistant.css">
 <link rel="stylesheet" href="css/pages/dashboard.css">
 <link rel="stylesheet" href="css/pages/audit.css">
+<!-- Auth cloak: hide the page until Router.guard() confirms a session, and
+     keep authenticated pages out of search engines. The guard already
+     redirects a logged-out visitor, but without this the shell can paint for
+     a frame first. Removed by js/router.js the moment the guard passes. -->
+<meta name="robots" content="noindex, nofollow">
+<style id="authCloak">body{visibility:hidden}</style>
 </head>
 <body>
 <div id="appShell"></div>

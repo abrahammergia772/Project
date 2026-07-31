@@ -63,24 +63,51 @@ const Router = (() => {
   }
 
   // Call at top of every protected page's inline script
+  /**
+   * Remove the auth cloak so the page becomes visible.
+   *
+   * Authenticated pages ship `body{visibility:hidden}` so nothing paints
+   * before we know there is a valid session. Every path that returns true
+   * from guard() must call this, and every path that returns false must NOT
+   * -- the page stays blank while the browser navigates away.
+   */
+  function reveal() {
+    const cloak = document.getElementById("authCloak");
+    if (cloak) cloak.remove();
+  }
+
   function guard() {
     if (!Auth.isLoggedIn()) {
-      window.location.href = "index.html";
+      // Deliberately no reveal(): stay hidden through the redirect.
+      window.location.href = Auth.loginPageFor ? Auth.loginPageFor() : "index.html";
       return false;
     }
     Auth.maybeRefresh();
     // Re-apply the role the user last switched to, before any access check.
     Auth.restoreActiveRole();
     const pageKey = currentPageKey();
-    if (pageKey === "index") return true;
+    if (pageKey === "index") { reveal(); return true; }
 
-    const access = accessFor(pageKey, Auth.getUser().role);
+    const access = accessFor(pageKey, Auth.getUser().role, Auth.getUser());
     if (access === false) {
+      // Signed in, but not allowed here. Stay hidden while we bounce to the
+      // dashboard so the forbidden page never paints.
       sessionStorage.setItem("buildiq_access_denied", "1");
-      window.location.href = "dashboard.html";
+      window.location.href = "dashboard";
       return false;
     }
+    reveal();
     return true;
+  }
+
+  // Safety net: if a page somehow never calls guard() -- a scripting error, a
+  // page added without the standard footer -- the cloak would leave it blank
+  // forever. Reveal on load for anyone already signed in, so a bug degrades to
+  // "visible" rather than "permanently broken".
+  if (typeof window !== "undefined") {
+    window.addEventListener("load", () => {
+      if (document.getElementById("authCloak") && Auth.isLoggedIn()) reveal();
+    });
   }
 
   // Show "Access Denied" toast if redirected here because of it
@@ -91,5 +118,5 @@ const Router = (() => {
     }
   }
 
-  return { ACCESS, canAccess, accessFor, guard, showAccessDeniedIfNeeded, currentPageKey };
+  return { ACCESS, canAccess, accessFor, guard, reveal, showAccessDeniedIfNeeded, currentPageKey };
 })();
