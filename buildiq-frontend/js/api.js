@@ -771,6 +771,37 @@ const API = (() => {
     getDashboardStats: () => BUILDIQ_CONFIG.MOCK_MODE
       ? Promise.resolve(MockData.dashboardStats(Auth.getUser()?.role))
       : request("/dashboard/stats"),
+    // Returns a Blob so the caller can trigger a browser download. In mock
+    // mode the CSV is built client-side from MockData so the offline demo
+    // still produces a real file.
+    exportAttendance: (params = {}) => {
+      if (BUILDIQ_CONFIG.MOCK_MODE) {
+        const qs = new URLSearchParams(params);
+        const date = params.date || new Date().toISOString().slice(0, 10);
+        const rows = (window.DataStore ? DataStore.attendance : MockData.attendance)
+          .filter(a => (params.date ? a.date === params.date : true));
+        const esc = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
+        const head = ["Date","Person","Person ID","Type","Department","Project",
+                      "Status","Check In","Recorded By","Absence Reason",
+                      "Reason Category","Reason Status","Reviewed By"];
+        const body = rows.map(a => [a.date, a.person_name, a.person_id,
+          a.person_type === "daily_worker" ? "Daily Worker" : "Staff",
+          a.department, a.project_title, a.status, a.check_in, a.recorded_by,
+          a.reason, a.reason_category, a.reason_status, a.reason_reviewed_by]
+          .map(esc).join(","));
+        const csv = [head.map(esc).join(","), ...body].join("\n");
+        return Promise.resolve(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+      }
+      const qs = new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v != null && v !== "")
+      ).toString();
+      return fetch(`${base()}/attendance/export${qs ? "?" + qs : ""}`, {
+        headers: Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {},
+      }).then(res => {
+        if (!res.ok) throw new Error(`Export failed (${res.status})`);
+        return res.blob();
+      });
+    },
     getAttendance: (params) => BUILDIQ_CONFIG.MOCK_MODE
       ? Promise.resolve(MockData.attendance)
       : request("/attendance", { params }),

@@ -5,7 +5,11 @@ the personal absence-reason workflow, and the AI absence ranking.
 """
 from __future__ import annotations
 
+import csv
+import io
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -129,6 +133,97 @@ def save_attendance(payload: AttendanceBulkRequest,
             roles=list(ORG_WIDE), departments=[WORKFORCE_DEPT],
         )
     return [attendance_dict(a) for a in saved]
+
+
+@router.get("/attendance/export")
+def export_attendance(
+    date: str | None = Query(None, description="Single day, YYYY-MM-DD"),
+    start: str | None = Query(None, description="Range start, inclusive"),
+    end: str | None = Query(None, description="Range end, inclusive"),
+    department: str | None = Query(None),
+    status_filter: str | None = Query(None, alias="status",
+                                      description="Present or Absent"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Download the register as a CSV file.
+
+    Defaults to today. Rows are scoped by the caller's own visibility, so a
+    Department Manager exports their department while the Workforce &
+    Attendance team exports the whole organization -- the file can never
+    contain rows the user could not already see on screen.
+
+    Declared BEFORE /attendance/{date}/reason so "export" is not captured as
+    a date parameter.
+    """
+    if not can_view_attendance(user):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            f"Access denied — {user.role} has no attendance access",
+        )
+
+    records = visible_attendance(db, user)
+
+    if not date and not start and not end:
+        date = utcnow().strftime("%Y-%m-%d")
+
+    if date:
+        records = [a for a in records if a.date == date]
+    else:
+        if start:
+            records = [a for a in records if a.date >= start]
+        if end:
+            records = [a for a in records if a.date <= end]
+
+    if department:
+        records = [a for a in records if (a.department or "") == department]
+    if status_filter:
+        records = [a for a in records if a.status == status_filter]
+
+    records.sort(key=lambda a: (a.date, a.person_name or "", a.person_id))
+
+    buf = io.StringIO()
+    writer = csv.writer(buf, lineterminator="\n")
+    writer.writerow([
+        "Date", "Person", "Person ID", "Type", "Department", "Project",
+        "Status", "Check In", "Recorded By",
+        "Absence Reason", "Reason Category", "Reason Status", "Reviewed By",
+    ])
+    for a in records:
+        writer.writerow([
+            a.date,
+            a.person_name or "",
+            a.person_id,
+            "Daily Worker" if a.person_type == "daily_worker" else "Staff",
+            a.department or "",
+            a.project_title or "",
+            a.status,
+            a.check_in or "",
+            a.recorded_by or "",
+            (a.reason or "").replace("\n", " "),
+            a.reason_category or "",
+            a.reason_status or "",
+            a.reason_reviewed_by or "",
+        ])
+
+    present = sum(1 for a in records if a.status == "Present")
+    absent = sum(1 for a in records if a.status == "Absent")
+    writer.writerow([])
+    writer.writerow(["TOTAL", len(records), "", "", "", "",
+                     f"Present {present} / Absent {absent}"])
+
+    label = date if date else f"{start or 'start'}_to_{end or 'end'}"
+    filename = f"buildiq-attendance-{label}.csv"
+
+    record_audit(db, user, "EXPORT_DATA", f"attendance/export/{label}")
+    db.commit()
+
+    # utf-8-sig: Excel needs the BOM to read non-ASCII names correctly.
+    return StreamingResponse(
+        io.BytesIO(buf.getvalue().encode("utf-8-sig")),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/attendance/{date}/reason", response_model=AttendanceOut)

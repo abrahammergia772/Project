@@ -359,7 +359,8 @@ const AttendancePage = (() => {
         <div class="field" style="margin-bottom:0;"><label>Date</label><input class="input" type="date" id="attDate" value="${selectedDate}" max="${new Date().toISOString().slice(0,10)}"></div>
         <button class="btn btn-secondary btn-sm" id="markAllPresentBtn" style="align-self:flex-end;"><i class="fa-solid fa-check-double"></i> Mark All Present</button>
         <button class="btn btn-secondary btn-sm" id="markAllAbsentBtn" style="align-self:flex-end;"><i class="fa-solid fa-user-slash"></i> Mark All Absent</button>
-        <button class="btn btn-primary" id="saveAttendanceBtn" style="align-self:flex-end; margin-left:auto;"><i class="fa-solid fa-floppy-disk"></i> Save Attendance</button>
+        <button class="btn btn-secondary btn-sm" id="exportAttendanceBtn" style="align-self:flex-end; margin-left:auto;"><i class="fa-solid fa-file-csv"></i> Download CSV</button>
+        <button class="btn btn-primary" id="saveAttendanceBtn" style="align-self:flex-end;"><i class="fa-solid fa-floppy-disk"></i> Save Attendance</button>
       </div>
       <div id="attendanceRows">${people.map(p => attendanceRowHtml(p)).join("")}</div>`;
 
@@ -373,6 +374,7 @@ const AttendancePage = (() => {
       renderTakeAttendance(el);
     });
     document.getElementById("saveAttendanceBtn").addEventListener("click", () => saveAttendance(people));
+    document.getElementById("exportAttendanceBtn").addEventListener("click", () => downloadRegister(selectedDate));
 
     Utils.qsa(".attendance-status-toggle button", el).forEach(btn => btn.addEventListener("click", () => {
       pendingMarks[btn.dataset.person] = btn.dataset.status;
@@ -400,6 +402,37 @@ const AttendancePage = (() => {
   function loadExistingMarksForDate() {
     // Pre-fill pendingMarks with whatever's already recorded for the selected date so re-opening the page doesn't lose data
     DataStore.attendance.filter(a => a.date === selectedDate).forEach(a => { if (!(a.person_id in pendingMarks)) pendingMarks[a.person_id] = a.status; });
+  }
+
+  /**
+   * Download the register for a day as a CSV file.
+   *
+   * The server scopes rows to what this user may already see, so the file can
+   * never contain records they could not read on screen.
+   */
+  async function downloadRegister(date) {
+    const btn = document.getElementById("exportAttendanceBtn");
+    const original = btn ? btn.innerHTML : "";
+    if (btn) { btn.disabled = true; btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Preparing...`; }
+    try {
+      const blob = await API.exportAttendance({ date });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `buildiq-attendance-${date}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      // Revoke on the next tick: revoking immediately can cancel the download
+      // in some browsers before it has started reading the blob.
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+      Components.createToast(`Register for ${date} downloaded.`, "success");
+      AppEvents.logAudit(user, "EXPORT_DATA", `attendance/export/${date}`);
+    } catch (err) {
+      Components.createToast(`Could not download the register: ${err.message}`, "error");
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = original; }
+    }
   }
 
   async function saveAttendance(people) {

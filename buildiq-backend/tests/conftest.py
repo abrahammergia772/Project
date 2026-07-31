@@ -11,3 +11,16 @@ import os
 os.environ.setdefault("ALLOW_SQLITE", "true")
 os.environ.setdefault("SECRET_KEY", "test-secret-key")
 os.environ.setdefault("DATABASE_URL", "sqlite:///./test_default.db")
+
+
+# The TestClient fixture lives here so every test module can use it. It was
+# previously defined inside test_api.py, which made it invisible to new files.
+import pytest
+
+
+@pytest.fixture(scope="session")
+def client():
+    from fastapi.testclient import TestClient
+    from app.main import app
+    with TestClient(app) as c:
+        yield c
