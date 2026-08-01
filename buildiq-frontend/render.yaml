@@ -29,6 +29,12 @@ services:
     # extensionless form for static sites; these rules make it explicit and
     # keep it working if that default ever changes.
     routes:
+      # The app is a single page: everything renders inside app.html, so the
+      # address bar only ever shows the bare domain.
+      - type: rewrite
+        source: /app
+        destination: /app.html
+      # Keep the per-page files reachable so an old bookmark still works.
       - type: rewrite
         source: /:page
         destination: /:page.html

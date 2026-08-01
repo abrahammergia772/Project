@@ -430,7 +430,7 @@
 (function() {
   // If already logged in, go straight to dashboard
   if (Auth.isLoggedIn()) {
-    window.location.href = "dashboard";
+    window.location.href = "app";
     return;
   }
 
@@ -696,7 +696,7 @@
         return;
       }
       Components.createToast(`Welcome back, ${user.name}!`, "success");
-      setTimeout(() => window.location.href = "dashboard", 500);
+      setTimeout(() => window.location.href = "app", 500);
     } catch (err) {
       btn.disabled = false;
       btn.innerHTML = `<span>Sign In</span> <i class="fa-solid fa-arrow-right"></i>`;
@@ -714,7 +714,7 @@
       try {
         const user = await Auth.login(demoEmail, "Demo1234!");
         Components.createToast(`Welcome, ${user.name}!`, "success");
-        setTimeout(() => window.location.href = "dashboard", 400);
+        setTimeout(() => window.location.href = "app", 400);
       } catch {}
     });
   });
@@ -953,7 +953,7 @@
     try {
       const user = await Auth.signup(payload);
       Components.createToast(`Account created! Welcome, ${user.name}.`, "success");
-      setTimeout(() => window.location.href = "dashboard", 600);
+      setTimeout(() => window.location.href = "app", 600);
     } catch (err) {
       btn.disabled = false;
       btn.textContent = "Create Account";

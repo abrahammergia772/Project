@@ -93,6 +93,8 @@ const Router = (() => {
       // Signed in, but not allowed here. Stay hidden while we bounce to the
       // dashboard so the forbidden page never paints.
       sessionStorage.setItem("buildiq_access_denied", "1");
+      // Inside the SPA this is handled by SPA.go(); this line only
+      // runs on the standalone pages, which are still served.
       window.location.href = "dashboard";
       return false;
     }

@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BuildIQ</title>
+
+<!-- Single-page shell. Every authenticated screen renders here, so the
+     address bar only ever shows the bare domain. The old per-page files are
+     kept and still work; they simply are not linked from the app any more. -->
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+
+<link rel="stylesheet" href="css/reset.css">
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/components.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/ai-assistant.css">
+<link rel="stylesheet" href="css/pages/dashboard.css">
+<link rel="stylesheet" href="css/pages/ai_insights.css">
+<link rel="stylesheet" href="css/pages/members.css">
+<link rel="stylesheet" href="css/pages/tasks.css">
+<link rel="stylesheet" href="css/pages/attendance.css">
+<link rel="stylesheet" href="css/pages/audit.css">
+<link rel="stylesheet" href="css/pages/reports.css">
+<link rel="stylesheet" href="css/pages/complaints.css">
+<link rel="stylesheet" href="css/pages/projects.css">
+
+<!-- Auth cloak: hide the page until Router.guard() confirms a session, and
+     keep the app out of search engines. Removed by js/router.js. -->
+<meta name="robots" content="noindex, nofollow">
+<style id="authCloak">body{visibility:hidden}</style>
+</head>
+<body>
+
+<div id="appShell"></div>
+
+<script src="js/config.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/mock-data.js"></script>
+<script src="js/reference-data.js"></script>
+<script src="js/data-store.js"></script>
+<script src="js/app-events.js"></script>
+<script src="js/roles.js"></script>
+<script src="js/ai-engine.js"></script>
+<script src="js/entity-detail.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/api.js"></script>
+<script src="js/components.js"></script>
+<script src="js/router.js"></script>
+<script src="js/ai-model.js"></script>
+<script src="js/ai-assistant.js"></script>
+<script src="js/shell.js"></script>
+
+<!-- Page modules. Loaded up front: there is no build step, and lazy-loading
+     14 small files would add more complexity than it saves. -->
+<script src="js/pages/ai_insights.js"></script>
+<script src="js/pages/attendance.js"></script>
+<script src="js/pages/audit.js"></script>
+<script src="js/pages/chatbot.js"></script>
+<script src="js/pages/complaints.js"></script>
+<script src="js/pages/dashboard.js"></script>
+<script src="js/pages/departments.js"></script>
+<script src="js/pages/documents.js"></script>
+<script src="js/pages/members.js"></script>
+<script src="js/pages/projects.js"></script>
+<script src="js/pages/reports.js"></script>
+<script src="js/pages/settings.js"></script>
+<script src="js/pages/tasks.js"></script>
+<script src="js/pages/user_management.js"></script>
+
+<script src="js/spa.js"></script>
+<script>
+  SPA.start();
+</script>
+</body>
+</html>

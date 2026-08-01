@@ -148,12 +148,12 @@
     const u = Auth.getUser();
     if (u && Roles.usesPrivilegedLogin(u.role)) {
       Components.createToast(`Verified as ${u.role}. Opening console...`, "success");
-      setTimeout(() => window.location.href = "dashboard", 500);
+      setTimeout(() => window.location.href = "app", 500);
       return;
     }
     // A non-privileged session must never be silently upgraded by URL.
     if (isHandoff) Auth.logout({ silent: true });
-    else { window.location.href = "dashboard"; return; }
+    else { window.location.href = "app"; return; }
   }
 
   if (isHandoff) {
@@ -203,7 +203,7 @@
       }
 
       Components.createToast(`Welcome, ${user.name}.`, "success");
-      setTimeout(() => window.location.href = "dashboard", 500);
+      setTimeout(() => window.location.href = "app", 500);
     } catch (err) {
       if (btn) { btn.disabled = false; btn.innerHTML = restoreHtml; }
       // Deliberately vague: never reveal whether the address exists.
