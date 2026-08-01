@@ -49,6 +49,10 @@ class UserOut(BaseModel):
     job_title: str | None = None
     org_name: str | None = None
     avatar: str | None = None
+    # True once the user has uploaded a profile photo. The bytes are fetched
+    # separately from GET /members/{id}/avatar, so this stays a small flag
+    # rather than inlining an image in every auth response.
+    has_avatar: bool = False
     client_id: str | None = None
 
 
@@ -94,6 +98,7 @@ class MemberOut(ORMModel):
     phone: str | None = None
     joined: datetime | None = None
     avatar_color: str | None = None
+    has_avatar: bool = False
 
 
 class MemberCreate(BaseModel):

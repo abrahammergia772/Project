@@ -102,12 +102,110 @@ def test_messaging_an_unknown_member_is_rejected(client):
     assert r.status_code == 404
 
 
-def test_contacts_exclude_clients_and_self(client):
+def test_contacts_exclude_only_yourself(client):
+    """Messaging is org-wide: the address book is everyone but you.
+
+    This used to exclude Clients and follow visible_members(). It no longer
+    does -- see test_anyone_can_message_anyone below for the reasoning.
+    """
     admin = _tok(client, "admin@buildiq.et")
     people = client.get("/messages/contacts", headers=admin).json()
     assert people
-    assert all(p["role"] != "Client" for p in people)
     assert all(p["id"] != _id(client, admin) for p in people)
+    assert any(p["role"] == "Client" for p in people), "Clients are reachable now"
+
+
+def test_an_engineer_sees_the_whole_organisation_in_contacts(client):
+    """The narrow case that proves the change: an Engineer's record scope is
+    their own row, but their address book is everyone."""
+    eng = _tok(client, "engineer@buildiq.et")
+    people = client.get("/messages/contacts", headers=eng).json()
+    roles = {p["role"] for p in people}
+    assert "Super Admin" in roles
+    assert "Client" in roles
+    assert len(people) > 1
+
+
+def test_contacts_can_be_searched(client):
+    eng = _tok(client, "engineer@buildiq.et")
+    everyone = client.get("/messages/contacts", headers=eng).json()
+    target = next(p for p in everyone if p["role"] == "Super Admin")
+
+    # By name fragment...
+    by_name = client.get("/messages/contacts",
+                         params={"q": target["name"].split()[0].lower()},
+                         headers=eng).json()
+    assert target["id"] in {p["id"] for p in by_name}
+
+    # ...and by role, which is how you find "all the auditors".
+    by_role = client.get("/messages/contacts", params={"q": "auditor"},
+                         headers=eng).json()
+    assert by_role and all("auditor" in (p["role"] or "").lower()
+                           or "auditor" in (p["department"] or "").lower()
+                           or "auditor" in (p["email"] or "").lower()
+                           or "auditor" in (p["job_title"] or "").lower()
+                           for p in by_role)
+
+    assert client.get("/messages/contacts",
+                      params={"q": "zzzz-nobody"}, headers=eng).json() == []
+
+
+def test_search_never_returns_yourself(client):
+    eng = _tok(client, "engineer@buildiq.et")
+    me = client.get("/auth/me", headers=eng).json()
+    found = client.get("/messages/contacts",
+                       params={"q": me["name"].split()[0]}, headers=eng).json()
+    assert all(p["id"] != me["id"] for p in found)
+
+
+def test_anyone_can_message_anyone(client):
+    """Every registered account can reach every other one, both directions.
+
+    Before this change the send endpoint used visible_members(), so an
+    Engineer could be written to by the Super Admin but got a 403 trying to
+    answer anyone outside their own department.
+    """
+    eng = _tok(client, "engineer@buildiq.et")
+    auditor = _tok(client, "auditor@buildiq.et")
+    cli = _tok(client, "client@buildiq.et")
+
+    eng_id = _id(client, eng)
+    auditor_id = _id(client, auditor)
+    client_id = _id(client, cli)
+
+    # Engineer -> Auditor: no prior message, different departments.
+    assert client.post("/messages", headers=eng,
+                       json={"recipient_id": auditor_id,
+                             "body": "cold open"}).status_code == 201
+    # Engineer -> Client, and Client -> Engineer.
+    assert client.post("/messages", headers=eng,
+                       json={"recipient_id": client_id,
+                             "body": "to a client"}).status_code == 201
+    assert client.post("/messages", headers=cli,
+                       json={"recipient_id": eng_id,
+                             "body": "from a client"}).status_code == 201
+
+
+def test_a_conversation_is_still_private_to_its_two_participants(client):
+    """Widening who you may WRITE to must not widen who may READ."""
+    eng = _tok(client, "engineer@buildiq.et")
+    cli = _tok(client, "client@buildiq.et")
+    admin = _tok(client, "admin@buildiq.et")
+    eng_id, client_id = _id(client, eng), _id(client, cli)
+
+    client.post("/messages", headers=eng,
+                json={"recipient_id": client_id, "body": "private words"})
+
+    # The Super Admin is not a participant, so this thread is empty for them.
+    seen = client.get(f"/messages/{client_id}", headers=admin).json()
+    assert all(m["body"] != "private words" for m in seen)
+
+
+def test_you_still_cannot_message_yourself(client):
+    eng = _tok(client, "engineer@buildiq.et")
+    r = client.post("/messages", headers=eng,
+                    json={"recipient_id": _id(client, eng), "body": "hi me"})
+    assert r.status_code == 400
 
 
 def test_conversations_list_the_latest_message(client):
@@ -293,3 +391,46 @@ def test_an_unsolicited_message_outside_your_scope_is_still_blocked(client):
     r = client.post("/messages", headers=eng,
                     json={"recipient_id": stranger, "body": "cold open"})
     assert r.status_code == 403
+
+
+def test_a_photo_survives_a_new_session(client):
+    """The bug: the photo was stored but nothing ever advertised it.
+
+    /auth/me had no has_avatar field, so a fresh sign-in had no way to know
+    a photo existed and every avatar fell back to initials -- which looked
+    exactly like the upload had not been saved.
+    """
+    # A user no other test uploads for, so the "before" state is genuinely
+    # empty. (The client fixture is session-scoped: using admin here passed
+    # only because an earlier test had already given them a photo.)
+    pm = _tok(client, "pm@buildiq.et")
+    assert client.get("/auth/me", headers=pm).json()["has_avatar"] is False
+
+    client.post("/members/me/avatar", headers=pm,
+                files={"file": ("a.png", io.BytesIO(PNG), "image/png")})
+
+    # Log in again from scratch: a brand new token, as if the tab was closed.
+    fresh = _tok(client, "pm@buildiq.et")
+    assert client.get("/auth/me", headers=fresh).json()["has_avatar"] is True
+
+    # And the bytes are still there.
+    r = client.get(f"/members/{_id(client, fresh)}/avatar", headers=fresh)
+    assert r.status_code == 200 and r.content
+
+
+def test_others_can_tell_who_has_a_photo(client):
+    """Contacts and the directory carry the flag, so the UI only requests
+    images that exist instead of a 404 per person."""
+    admin = _tok(client, "admin@buildiq.et")
+    client.post("/members/me/avatar", headers=admin,
+                files={"file": ("a.png", io.BytesIO(PNG), "image/png")})
+    admin_id = _id(client, admin)
+
+    eng = _tok(client, "engineer@buildiq.et")
+    contacts = client.get("/messages/contacts", headers=eng).json()
+    entry = next(c for c in contacts if c["id"] == admin_id)
+    assert entry["has_avatar"] is True
+
+    members = client.get("/members", headers=admin).json()
+    assert next(m for m in members if m["id"] == admin_id)["has_avatar"] is True
+    assert any(m["has_avatar"] is False for m in members), "no photo means False"

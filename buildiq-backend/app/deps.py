@@ -234,6 +234,7 @@ def member_dict(u: User) -> dict:
         "status": u.status, "projects_count": u.projects_count,
         "on_time_pct": u.on_time_pct, "phone": u.phone, "joined": u.joined,
         "avatar_color": u.avatar_color,
+        "has_avatar": bool(getattr(u, "avatar_url", None)),
     }
 
 

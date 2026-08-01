@@ -30,9 +30,10 @@ const Router = (() => {
     // Auditors get it (unlike the chatbot) because anomaly detection is theirs.
     ai_insights:      { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
     documents:        { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
-    // Direct messages: every internal role. Clients reach the org through
-    // complaints instead, so they have no inbox.
-    messages:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": false },
+    // Direct messages: every registered account, Clients included. Being
+    // able to say something to someone is a separate question from being
+    // able to see their records, which stays scoped everywhere else.
+    messages:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true },
     settings:         { "Super Admin": true, "General Manager": true, "Department Manager": true,   "Project Manager": true, "Engineer": true,  "Auditor": true,  "Client": true  },
     user_management:  { "Super Admin": true, "General Manager": true, "Department Manager": false,  "Project Manager": false, "Engineer": false, "Auditor": false, "Client": false },
   };

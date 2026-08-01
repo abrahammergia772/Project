@@ -101,3 +101,42 @@
 
 /* Topbar compose button sits beside the bell. */
 .topbar-notif-compose { display: flex; align-items: center; }
+
+/* ---------- New message: searchable recipient picker ----------
+   Replaces the old <select> of every account, which stopped being usable
+   past a couple of dozen people. */
+.compose-search { position: relative; }
+.compose-search > i {
+  position: absolute; left: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); font-size: 12.5px; pointer-events: none;
+}
+.compose-search .input { padding-left: 32px; }
+
+.compose-results {
+  margin-top: 8px; max-height: 230px; overflow-y: auto;
+  border: 1px solid var(--border); border-radius: 10px;
+  background: var(--bg-card);
+}
+.compose-person {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; background: none; border: 0; cursor: pointer;
+  text-align: left; color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+}
+.compose-person:last-child { border-bottom: 0; }
+.compose-person:hover { background: var(--bg-hover, rgba(127,127,127,.10)); }
+.compose-person.selected { background: rgba(37, 99, 235, .10); }
+.compose-person.selected > i { margin-left: auto; color: var(--accent); }
+.compose-person-main { display: flex; flex-direction: column; min-width: 0; }
+.compose-person-name {
+  font-size: 13.5px; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.compose-person-sub { font-size: 11.5px; color: var(--text-muted); }
+.compose-empty { padding: 14px; font-size: 12.5px; color: var(--text-muted); text-align: center; }
+
+.compose-picked { margin-top: 8px; min-height: 22px; }
+.compose-chip {
+  display: inline-block; padding: 4px 10px; border-radius: 999px;
+  background: rgba(37, 99, 235, .12); color: var(--accent); font-size: 12px;
+}

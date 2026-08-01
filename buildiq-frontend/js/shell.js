@@ -151,7 +151,7 @@ const Shell = (() => {
           </div>
           <button class="icon-btn" id="themeToggleBtn" aria-label="Toggle theme"><i class="fa-solid fa-moon"></i></button>
           <div class="user-chip" id="userMenuBtn">
-            ${Components.createAvatar(user.name, "sm")}
+            ${Components.createAvatar(user.name, "sm", null, user)}
             <i class="fa-solid fa-chevron-down"></i>
           </div>
         </div>

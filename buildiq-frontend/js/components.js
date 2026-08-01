@@ -40,9 +40,20 @@ const Components = (() => {
   }
 
   // ---------------- Avatar ----------------
-  function createAvatar(name = "?", size = "md", color) {
+  // `person` may be a member id, or an object like { id, has_avatar }. When
+  // given, the avatar is tagged with data-avatar-id and js/avatars.js swaps
+  // the initials for the uploaded photo. Without it you get initials, which
+  // is the right answer for people who never uploaded one.
+  function createAvatar(name = "?", size = "md", color, person) {
     const bg = color || colorFromString(name);
-    return `<div class="avatar avatar-${size}" style="background:${bg}">${escapeHtml(initials(name) || "?")}</div>`;
+    const id = typeof person === "string" ? person : person?.id;
+    const known = (person && typeof person === "object" && "has_avatar" in person)
+      ? (person.has_avatar ? "1" : "0")
+      : "";
+    const tag = id
+      ? ` data-avatar-id="${escapeHtml(id)}"${known ? ` data-has-avatar="${known}"` : ""}`
+      : "";
+    return `<div class="avatar avatar-${size}" style="background:${bg}"${tag}>${escapeHtml(initials(name) || "?")}</div>`;
   }
 
   // ---------------- Badge ----------------
@@ -108,7 +119,7 @@ const Components = (() => {
       <div class="card card-hover member-card" data-id="${member.id}" style="position:relative; overflow:hidden;">
         <div style="position:absolute; top:0; left:0; right:0; height:4px; background:${color};"></div>
         <div class="flex items-center gap-12 clickable-entity" data-entity="member" data-id="${member.id}" style="margin-top:6px; cursor:pointer;">
-          ${createAvatar(member.full_name, "lg", member.avatar_color)}
+          ${createAvatar(member.full_name, "lg", member.avatar_color, member)}
           <div style="min-width:0;">
             <div style="font-weight:700; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${escapeHtml(member.full_name)}</div>
             <div style="font-size:12.5px; color:var(--text-muted);">${escapeHtml(member.job_title)}</div>
@@ -170,7 +181,7 @@ const Components = (() => {
           : `<span class="pm-label pm-unassigned"><i class="fa-solid fa-user-slash"></i> No manager assigned</span>`}
         </div>
         <div class="flex items-center justify-between" style="margin-bottom:12px;">
-          <div class="avatar-group">${project.team.slice(0,4).map(m => createAvatar(m.full_name, "sm", m.avatar_color)).join("")}</div>
+          <div class="avatar-group">${project.team.slice(0,4).map(m => createAvatar(m.full_name, "sm", m.avatar_color, m)).join("")}</div>
           <span style="font-size:12px; color:var(--text-muted);">${escapeHtml(project.status)}</span>
         </div>
         <div class="flex gap-8">

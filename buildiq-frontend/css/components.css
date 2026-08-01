@@ -320,6 +320,9 @@ table.data-table { min-width: 640px; }
   overflow: hidden;
 }
 .avatar img { width: 100%; height: 100%; object-fit: cover; }
+/* Set by js/avatars.js once a real photo has loaded: the initials are
+   removed and the image fills the circle. */
+.avatar-photo { background-size: cover; background-position: center; color: transparent; }
 .avatar-sm { width: 28px; height: 28px; font-size: 11px; }
 .avatar-md { width: 36px; height: 36px; font-size: 13px; }
 .avatar-lg { width: 56px; height: 56px; font-size: 18px; }

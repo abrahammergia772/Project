@@ -58,6 +58,14 @@ const Auth = (() => {
     return !!getToken() && !!getUser() && Date.now() < getExpiry();
   }
 
+  /** Update the stored user without touching the token or its expiry.
+   *  Used when something changes about the account mid-session (e.g. a new
+   *  profile photo) and the whole UI should notice. */
+  function setUser(user) {
+    if (!user) return;
+    store.setItem(USER_KEY, JSON.stringify(user));
+  }
+
   function setSession({ token, user, expires }) {
     store.setItem(TOKEN_KEY, token);
     store.setItem(USER_KEY, JSON.stringify(user));
@@ -65,6 +73,9 @@ const Auth = (() => {
   }
 
   function clearSession() {
+    // Photos are fetched per session and held as object URLs; leaving them
+    // behind would show the previous user's face to the next one.
+    try { window.Avatars && Avatars.clear(); } catch (e) { /* not loaded */ }
     store.removeItem(TOKEN_KEY);
     store.removeItem(USER_KEY);
     store.removeItem(EXPIRES_KEY);
@@ -205,7 +216,7 @@ const Auth = (() => {
     return refreshing;
   }
 
-  return { getToken, getUser, getExpiry, isLoggedIn, setSession, clearSession, login, signup, logout,
+  return { getToken, getUser, getExpiry, isLoggedIn, setSession, setUser, clearSession, login, signup, logout,
     loginPageFor, STAFF_LOGIN, ADMIN_LOGIN,
     hasRole, holdsRole, maybeRefresh,
     getRoles, hasMultipleRoles, getActiveRole, switchRole, restoreActiveRole };

@@ -8,11 +8,11 @@ in the messaging API.
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import new_id, push_notification, record_audit, visible_members
+from ..deps import new_id, push_notification, record_audit
 from ..models import Message, User
 from ..schemas import ConversationOut, MessageCreate, MessageOut, OkResponse
 from ..security import get_current_user
@@ -34,24 +34,42 @@ def _dict(m: Message) -> dict:
 
 
 @router.get("/messages/contacts")
-def contacts(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Who this user may message.
+def contacts(q: str | None = Query(None, description="Filter by name, email, role or department"),
+             limit: int = Query(500, le=2000),
+             user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Who this user may message: every registered account except themselves.
 
-    Reuses visible_members(), so the address book matches the rest of the app:
-    an Engineer sees their department, a Super Admin sees everyone. Clients are
-    excluded — they contact the org through complaints, not direct messages.
+    Messaging is deliberately NOT scoped the way the rest of the app is. The
+    directory hides people from you because you have no business managing
+    their records -- that is a different question from whether you may say
+    something to them. Anyone with an account, Clients included, can reach
+    anyone else.
+
+    `q` filters server-side so the picker stays usable in a large
+    organisation; the client also filters what it already holds, so typing
+    feels instant.
     """
-    people = [m for m in visible_members(db, user)
-              if m.id != user.id and m.role != "Client"]
+    stmt = select(User).where(User.id != user.id, User.status == "Active")
+    if q:
+        needle = f"%{q.strip().lower()}%"
+        stmt = stmt.where(or_(
+            func.lower(User.full_name).like(needle),
+            func.lower(User.email).like(needle),
+            func.lower(User.role).like(needle),
+            func.lower(func.coalesce(User.department, "")).like(needle),
+            func.lower(func.coalesce(User.job_title, "")).like(needle),
+        ))
+    people = list(db.scalars(stmt.limit(limit)).all())
     return [{
         "id": m.id,
         "name": m.full_name,
+        "email": m.email,
         "role": m.role,
         "department": m.department,
         "job_title": m.job_title,
         "avatar_color": m.avatar_color,
-        "avatar_url": getattr(m, "avatar_url", None),
-    } for m in sorted(people, key=lambda x: x.full_name or "")]
+        "has_avatar": bool(getattr(m, "avatar_url", None)),
+    } for m in sorted(people, key=lambda x: (x.full_name or "").lower())]
 
 
 @router.get("/messages/conversations", response_model=list[ConversationOut])
@@ -132,26 +150,16 @@ def send(payload: MessageCreate,
     if recipient is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such member")
 
-    if recipient.role == "Client":
+    if recipient.status != "Active":
         raise HTTPException(status.HTTP_403_FORBIDDEN,
-                            "Clients are contacted through complaints, not messages")
+                            "That account is not active")
 
-    # You may message anyone in your own visibility scope, so messaging cannot
-    # be used to discover people the rest of the app hides from you.
-    #
-    # You may ALSO always reply to someone who has already written to you.
-    # Without this an Engineer could not answer a message from the Super
-    # Admin -- the Engineer's scope is their department, so the reply was
-    # rejected with 403 while the original message went through fine.
-    allowed = {m.id for m in visible_members(db, user)}
-    if recipient.id not in allowed:
-        has_written_to_me = db.scalar(
-            select(Message).where(Message.sender_id == recipient.id,
-                                  Message.recipient_id == user.id).limit(1)
-        )
-        if has_written_to_me is None:
-            raise HTTPException(status.HTTP_403_FORBIDDEN,
-                                "You cannot message that member")
+    # Every registered account may message every other registered account,
+    # Clients included. Messaging used to follow visible_members(), which
+    # meant an Engineer could be written to by the Super Admin but could not
+    # reply. Reach and record-visibility are separate concerns: reading
+    # someone's data is still scoped everywhere else in the API, and a
+    # conversation is still only readable by its two participants.
 
     msg = Message(
         id=new_id("msg"),

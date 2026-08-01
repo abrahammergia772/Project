@@ -714,9 +714,18 @@ const API = (() => {
 
     // Notifications
     // ---- Messages ----
+    // Every registered account except your own -- messaging is org-wide.
     getContacts: () => BUILDIQ_CONFIG.MOCK_MODE
-      ? Promise.resolve(MockData.members.filter(m => m.role !== "Client" && m.id !== Auth.getUser()?.id))
+      ? Promise.resolve(MockData.members.filter(m => m.id !== Auth.getUser()?.id))
       : request("/messages/contacts"),
+    // Server-side search, so the recipient picker still finds people who are
+    // not in the first page of contacts.
+    searchContacts: (q) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.members.filter(m =>
+          m.id !== Auth.getUser()?.id &&
+          [m.full_name, m.email, m.role, m.department]
+            .some(v => String(v || "").toLowerCase().includes(String(q).toLowerCase()))))
+      : request("/messages/contacts", { params: { q } }),
     getConversations: () => BUILDIQ_CONFIG.MOCK_MODE
       ? Promise.resolve([]) : request("/messages/conversations"),
     getThread: (otherId) => BUILDIQ_CONFIG.MOCK_MODE

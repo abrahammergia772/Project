@@ -65,7 +65,9 @@ def _user_out(u: User) -> UserOut:
         id=u.id, name=u.full_name, email=u.email, role=u.role,
         roles=u.all_roles, role_contexts=u.role_contexts or {},
         department=u.department, job_title=u.job_title,
-        org_name=u.org_name, avatar=None, client_id=u.client_id,
+        org_name=u.org_name, avatar=None,
+        has_avatar=bool(getattr(u, "avatar_url", None)),
+        client_id=u.client_id,
     )
 
 

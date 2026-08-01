@@ -29,7 +29,7 @@ const SettingsPage = (() => {
       el.innerHTML = `
         <div class="card">
           <div class="flex items-center gap-16" style="margin-bottom:20px;">
-              <div id="avatarPreview">${Components.createAvatar(user.name, "xl")}</div>
+              <div id="avatarPreview">${Components.createAvatar(user.name, "xl", null, user)}</div>
               <div>
                 <button class="btn btn-secondary btn-sm" id="changePhotoBtn">
                   <i class="fa-solid fa-camera"></i> Change Photo
@@ -77,6 +77,16 @@ const SettingsPage = (() => {
 
           try {
             await API.uploadAvatar(file);
+
+            // The photo is now on the server, but nothing in the UI would
+            // ever ask for it -- that is why it used to vanish the moment
+            // this tab was left. Record it on the session user and drop the
+            // cached copy so every avatar on screen (topbar, members list,
+            // messages) re-fetches the new image immediately.
+            Auth.setUser({ ...user, has_avatar: true });
+            user.has_avatar = true;
+            if (window.Avatars) Avatars.invalidate(user.id);
+
             Components.createToast("Photo updated.", "success");
             AppEvents.logAudit(user, "UPDATE_RECORD", `members/${user.id}/avatar`);
           } catch (err) {

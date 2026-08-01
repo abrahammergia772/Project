@@ -4,10 +4,16 @@
    Direct messages between members. Two panes: conversations on the left,
    the selected thread on the right.
 
-   The contact list comes from the server, which scopes it the same way the
-   rest of the app does — an Engineer sees their department, a Super Admin
-   sees everyone. Clients are excluded: they reach the organisation through
-   complaints, not direct messages.
+   Anyone with an account can message anyone else with an account, Clients
+   included. That is deliberately wider than the rest of the app: the
+   directory hides people whose records you have no business managing, which
+   is a different question from whether you may say something to them. A
+   conversation is still only readable by its two participants.
+
+   "New message" opens a searchable picker rather than a long <select>: type
+   a name, email, role or department and matching people appear. Filtering
+   happens locally first (instant) and the server is asked as well, so
+   someone outside the first page of contacts is still findable.
    ============================================================ */
 
 const MessagesPage = (() => {
@@ -48,7 +54,7 @@ const MessagesPage = (() => {
         <section class="msg-thread card" id="msgThread"></section>
       </div>`;
 
-    document.getElementById("newMsgBtn").addEventListener("click", openCompose);
+    document.getElementById("newMsgBtn").addEventListener("click", () => openCompose());
 
     await Promise.all([loadContacts(), loadConversations()]);
     renderList();
@@ -61,7 +67,11 @@ const MessagesPage = (() => {
   }
 
   async function loadContacts() {
-    try { contacts = await API.getContacts(); }
+    try {
+      const list = await API.getContacts();
+      // Mock data calls the field full_name; the live API calls it name.
+      contacts = list.map(c => ({ ...c, name: c.name || c.full_name }));
+    }
     catch (err) { contacts = []; console.error("[messages] contacts:", err.message); }
   }
 
@@ -99,7 +109,7 @@ const MessagesPage = (() => {
       <div class="msg-list-head">Conversations</div>
       ${conversations.map(c => `
         <button class="msg-row${c.user_id === activeId ? " active" : ""}" data-id="${esc(c.user_id)}">
-          ${Components.createAvatar(c.name || "?", "sm")}
+          ${Components.createAvatar(c.name || "?", "sm", null, c.user_id)}
           <div class="msg-row-main">
             <div class="msg-row-top">
               <span class="msg-row-name">${esc(c.name)}</span>
@@ -135,7 +145,7 @@ const MessagesPage = (() => {
 
     el.innerHTML = `
       <div class="msg-thread-head">
-        ${Components.createAvatar(name, "sm")}
+        ${Components.createAvatar(name, "sm", null, activeId)}
         <div>
           <div class="msg-thread-name">${esc(name)}</div>
           <div class="msg-thread-sub">${esc(who.role || "")}${who.department ? " · " + esc(who.department) : ""}</div>
@@ -190,21 +200,41 @@ const MessagesPage = (() => {
     });
   }
 
-  function openCompose() {
-    if (!contacts.length) {
-      Components.createToast("There is nobody you can message yet.", "info");
-      return;
-    }
-    const options = contacts.map(c =>
-      `<option value="${esc(c.id)}">${esc(c.name || c.full_name)} — ${esc(c.role)}${c.department ? " (" + esc(c.department) + ")" : ""}</option>`
-    ).join("");
+  // ---------------- New message: searchable recipient picker ----------------
+  // A plain <select> of everyone in the organisation is unusable once there
+  // are more than a couple of dozen accounts, so this is a search box with a
+  // live result list underneath it.
+  function personRow(c, selected) {
+    return `
+      <button type="button" class="compose-person${selected ? " selected" : ""}" data-id="${esc(c.id)}">
+        ${Components.createAvatar(c.name || "?", "sm", null, c)}
+        <span class="compose-person-main">
+          <span class="compose-person-name">${esc(c.name)}</span>
+          <span class="compose-person-sub">${esc(c.role || "")}${c.department ? " · " + esc(c.department) : ""}</span>
+        </span>
+        ${selected ? `<i class="fa-solid fa-check"></i>` : ""}
+      </button>`;
+  }
 
+  function matches(c, q) {
+    if (!q) return true;
+    return [c.name, c.email, c.role, c.department, c.job_title]
+      .some(v => String(v || "").toLowerCase().includes(q));
+  }
+
+  async function openCompose(preselectId = null) {
     const modal = Components.createModal({
       title: "New message",
       bodyHtml: `
         <div class="field">
-          <label for="composeTo">To</label>
-          <select class="input" id="composeTo">${options}</select>
+          <label for="composeSearch">To</label>
+          <div class="compose-search">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <input class="input" id="composeSearch" type="search" autocomplete="off"
+                   placeholder="Search by name, role or department...">
+          </div>
+          <div class="compose-results" id="composeResults" role="listbox"></div>
+          <div class="compose-picked" id="composePicked"></div>
         </div>
         <div class="field">
           <label for="composeBody">Message</label>
@@ -212,22 +242,76 @@ const MessagesPage = (() => {
         </div>`,
       actionsHtml: `
         <button class="btn btn-secondary" id="composeCancel">Cancel</button>
-        <button class="btn btn-primary" id="composeSend">
+        <button class="btn btn-primary" id="composeSend" disabled>
           <i class="fa-solid fa-paper-plane"></i> Send
         </button>`,
     });
 
+    const search = modal.el.querySelector("#composeSearch");
+    const results = modal.el.querySelector("#composeResults");
+    const picked = modal.el.querySelector("#composePicked");
+    const sendBtn = modal.el.querySelector("#composeSend");
+    let chosen = preselectId;
+    // Everyone we know about so far: the initial contact load plus anyone a
+    // server-side search has since turned up.
+    let pool = contacts.slice();
+
+    function paint(q) {
+      const list = pool.filter(c => matches(c, q)).slice(0, 50);
+      results.innerHTML = list.length
+        ? list.map(c => personRow(c, c.id === chosen)).join("")
+        : `<div class="compose-empty">No one matches “${esc(q)}”.</div>`;
+
+      Utils.qsa(".compose-person", results).forEach(b =>
+        b.addEventListener("click", () => {
+          chosen = b.dataset.id;
+          paint(search.value.trim().toLowerCase());
+        }));
+
+      const who = pool.find(c => c.id === chosen);
+      picked.innerHTML = who
+        ? `<span class="compose-chip">To: <b>${esc(who.name)}</b></span>`
+        : "";
+      sendBtn.disabled = !chosen;
+      if (window.Avatars) Avatars.hydrate(results);
+    }
+
+    paint("");
+    setTimeout(() => search.focus(), 30);
+
+    // Local filter on every keystroke; the server is asked once typing
+    // pauses, which is what makes people outside the first page findable.
+    let timer = null;
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      paint(q);
+      clearTimeout(timer);
+      if (q.length < 2) return;
+      timer = setTimeout(async () => {
+        try {
+          const found = await API.searchContacts(q);
+          const known = new Set(pool.map(c => c.id));
+          const extra = found.filter(c => !known.has(c.id));
+          if (extra.length) {
+            pool = pool.concat(extra);
+            if (search.value.trim().toLowerCase() === q) paint(q);
+          }
+        } catch (err) { console.error("[messages] search:", err.message); }
+      }, 250);
+    });
+
     modal.el.querySelector("#composeCancel").addEventListener("click", modal.close);
-    modal.el.querySelector("#composeSend").addEventListener("click", async (e) => {
-      const to = modal.el.querySelector("#composeTo").value;
+
+    sendBtn.addEventListener("click", async (e) => {
       const body = modal.el.querySelector("#composeBody").value.trim();
+      if (!chosen) { Components.createToast("Choose who to send it to.", "error"); return; }
       if (!body) { Components.createToast("Write a message first.", "error"); return; }
 
       e.target.disabled = true;
       try {
-        await API.sendMessage(to, body);
+        await API.sendMessage(chosen, body);
         modal.close();
-        activeId = to;
+        activeId = chosen;
         await loadConversations();
         renderList();
         await renderThread();
