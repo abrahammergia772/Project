@@ -30,6 +30,55 @@ logging.basicConfig(
 log = logging.getLogger("buildiq")
 
 
+def _add_missing_columns() -> None:
+    """Add columns the models declare but the database lacks.
+
+    Base.metadata.create_all() creates missing TABLES but never missing
+    COLUMNS, so adding a field to a model silently breaks every query against
+    an existing database -- adding users.avatar_url took the whole site down
+    with "column users.avatar_url does not exist", including login.
+
+    This is a safety net, not a migration system: it only ever ADDS nullable
+    columns, never drops, renames or retypes anything. The real migrations
+    live in supabase/migrations/. Failures are logged and ignored so a
+    permissions problem cannot stop the app booting.
+    """
+    from sqlalchemy import inspect, text
+
+    try:
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+    except Exception as exc:                       # pragma: no cover
+        log.warning("Could not inspect the schema: %s", exc)
+        return
+
+    for table in Base.metadata.sorted_tables:
+        if table.name not in existing_tables:
+            continue                               # create_all handles these
+        try:
+            have = {c["name"] for c in inspector.get_columns(table.name)}
+        except Exception:                          # pragma: no cover
+            continue
+
+        for column in table.columns:
+            if column.name in have:
+                continue
+            # Only nullable, default-less columns are safe to bolt on.
+            if not column.nullable:
+                log.warning(
+                    "Column %s.%s is missing and NOT NULL — run the migrations "
+                    "in supabase/migrations/", table.name, column.name)
+                continue
+            ddl = (f'ALTER TABLE {table.name} '
+                   f'ADD COLUMN {column.name} {column.type.compile(engine.dialect)}')
+            try:
+                with engine.begin() as conn:
+                    conn.execute(text(ddl))
+                log.warning("Added missing column %s.%s", table.name, column.name)
+            except Exception as exc:               # pragma: no cover
+                log.warning("Could not add %s.%s: %s", table.name, column.name, exc)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     # Refuse to boot with the default signing key in production.
@@ -105,6 +154,7 @@ async def lifespan(_: FastAPI):
 
     # Create tables. For real migrations use Alembic; this keeps first-run simple.
     Base.metadata.create_all(bind=engine)
+    _add_missing_columns()
     storage.ensure_bucket()
 
     if settings.SEED_ON_STARTUP:
