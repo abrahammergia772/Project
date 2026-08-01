@@ -1,0 +1,11 @@
+# Offline model training only. NOT installed on the deployed API --
+# the running service never imports scikit-learn, so nothing here affects
+# the Render build, the image size or the cold-start time.
+#
+#   pip install -r requirements-ml.txt
+#
+-r requirements.txt
+
+scikit-learn==1.6.1
+numpy==2.3.5
+joblib==1.5.3

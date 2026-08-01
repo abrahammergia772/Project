@@ -6,3 +6,8 @@ uploads/
 .pytest_cache/
 .venv/
 venv/
+
+# Trained models and extracted datasets: large, regenerable, and real
+# extracts contain staff names + activity. Never commit them.
+ml/artifacts/
+ml/data/
