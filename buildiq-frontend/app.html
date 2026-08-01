@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
 
 <link rel="stylesheet" href="css/reset.css">
 <link rel="stylesheet" href="css/tokens.css">
@@ -36,6 +37,13 @@
 <body>
 
 <div id="appShell"></div>
+
+<!-- Third-party libraries the page modules expect on window. The shell must
+     load every dependency of all 14 pages: dashboard, audit, complaints and
+     ai_insights call `new Chart(...)`, and omitting this made every one of
+     them fail with "Something went wrong". -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
 <script src="js/config.js"></script>
 <script src="js/utils.js"></script>
