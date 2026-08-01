@@ -713,6 +713,51 @@ const API = (() => {
       : request("/auth/reset-password", { method: "POST", body: { token, new_password }, auth: false }),
 
     // Notifications
+    // ---- Messages ----
+    getContacts: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve(MockData.members.filter(m => m.role !== "Client" && m.id !== Auth.getUser()?.id))
+      : request("/messages/contacts"),
+    getConversations: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve([]) : request("/messages/conversations"),
+    getThread: (otherId) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve([]) : request(`/messages/${otherId}`),
+    sendMessage: (recipientId, body) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id: "msg_mock", body, created_at: new Date().toISOString() })
+      : request("/messages", { method: "POST", body: { recipient_id: recipientId, body } }),
+    getUnreadMessages: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ count: 0 }) : request("/messages/unread-count"),
+
+    // ---- Writing notifications ----
+    canSendNotifications: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ can_send: true, can_broadcast_roles: true,
+                          can_target_departments: true, scope: "organization" })
+      : request("/notifications/can-send"),
+    createNotification: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id: "ntf_mock", ...payload })
+      : request("/notifications", { method: "POST", body: payload }),
+
+    // ---- Profile photo ----
+    uploadAvatar: (file) => {
+      if (BUILDIQ_CONFIG.MOCK_MODE) {
+        return Promise.resolve({ ok: true, avatar_url: URL.createObjectURL(file) });
+      }
+      const fd = new FormData();
+      fd.append("file", file);
+      // No Content-Type header: the browser must set the multipart boundary.
+      return fetch(`${base()}/members/me/avatar`, {
+        method: "POST",
+        headers: Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {},
+        body: fd,
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.detail || `Upload failed (${res.status})`);
+        }
+        return res.json();
+      });
+    },
+    avatarUrl: (memberId) => `${base()}/members/${memberId}/avatar`,
+
     getNotifications: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.notifications() : request("/notifications"),
     markNotificationRead: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.markNotificationRead(id) : request(`/notifications/${id}/read`, { method: "PUT" }),
     markAllNotificationsRead: () => BUILDIQ_CONFIG.MOCK_MODE ? Mock.markAllNotificationsRead() : request("/notifications/read-all", { method: "PUT" }),

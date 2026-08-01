@@ -56,6 +56,9 @@ create table if not exists public.users (
     projects_count    integer      not null default 0,
     on_time_pct       integer      not null default 90,
     avatar_color      varchar(16),
+    -- Storage key for an uploaded profile photo, prefixed with the backend
+    -- that holds it ("supabase:..." or "local:...").
+    avatar_url        varchar(400),
     client_id         varchar(64)  references public.clients (id) on delete set null,
     linked_project    varchar(200),
     joined            timestamptz  not null default now(),
@@ -395,5 +398,25 @@ create table if not exists public.saved_reports (
 );
 create index if not exists ix_saved_reports_generated_by_id on public.saved_reports (generated_by_id);
 create index if not exists ix_saved_reports_generated_at    on public.saved_reports (generated_at desc);
+
+-- ============================================================================
+-- messages — direct messages between two members
+-- ============================================================================
+create table if not exists public.messages (
+    id              varchar(64) primary key,
+    sender_id       varchar(64) not null,
+    sender_name     varchar(160),
+    recipient_id    varchar(64) not null,
+    recipient_name  varchar(160),
+    body            text        not null,
+    is_read         boolean     not null default false,
+    created_at      timestamptz not null default now()
+);
+create index if not exists ix_messages_sender_id    on public.messages (sender_id);
+create index if not exists ix_messages_recipient_id on public.messages (recipient_id);
+create index if not exists ix_messages_created_at   on public.messages (created_at desc);
+create index if not exists ix_messages_is_read      on public.messages (is_read);
+-- The inbox query pairs the two participants, so index them together.
+create index if not exists ix_messages_pair on public.messages (sender_id, recipient_id, created_at desc);
 
 commit;

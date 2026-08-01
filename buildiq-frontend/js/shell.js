@@ -14,6 +14,7 @@ const Shell = (() => {
       { key: "members", label: "Members", icon: "fa-users", href: "members" },
       { key: "departments", label: "Departments", icon: "fa-building", href: "departments" },
       { key: "documents", label: "Documents", icon: "fa-folder-open", href: "documents" },
+      { key: "messages", label: "Messages", icon: "fa-comments", href: "messages", badgeKey: "unread_messages" },
     ]},
     { label: "OPERATIONS", items: [
       { key: "projects", label: "Projects", icon: "fa-diagram-project", href: "projects" },
@@ -144,6 +145,9 @@ const Shell = (() => {
           <div class="notif-wrap">
             <button class="icon-btn" id="notifBtn" aria-label="Notifications" aria-haspopup="true" aria-expanded="false"><i class="fa-solid fa-bell"></i><span class="dot-badge hidden" id="notifDot"></span></button>
             <div class="notif-dropdown hidden" id="notifDropdown" role="menu" aria-label="Notifications"></div>
+          </div>
+          <div class="topbar-notif-compose">
+            <button class="icon-btn hidden" id="notifComposeBtn" aria-label="Send a notification" title="Send a notification"><i class="fa-solid fa-bullhorn"></i></button>
           </div>
           <button class="icon-btn" id="themeToggleBtn" aria-label="Toggle theme"><i class="fa-solid fa-moon"></i></button>
           <div class="user-chip" id="userMenuBtn">
@@ -286,6 +290,20 @@ const Shell = (() => {
   }
 
   function renderNotifList() {
+    // ---- Notification composer ----------------------------------------
+    // Visibility is decided by the SERVER (/notifications/can-send), not by a
+    // role list duplicated here: the two would drift, and a client-side copy
+    // would be advisory anyway since the endpoint re-checks every request.
+    const composeBtn = document.getElementById("notifComposeBtn");
+    if (composeBtn && !composeBtn.dataset.wired) {
+      composeBtn.dataset.wired = "1";
+      API.canSendNotifications().then(perm => {
+        if (!perm.can_send) return;
+        composeBtn.classList.remove("hidden");
+        composeBtn.addEventListener("click", () => openNotifCompose(perm));
+      }).catch(() => { /* leave it hidden */ });
+    }
+
     const dropdown = document.getElementById("notifDropdown");
     if (!dropdown) return;
     const unread = notifCache.filter(n => !n.read).length;
@@ -440,6 +458,110 @@ const Shell = (() => {
     // Pull the selectable model list once so the picker can render.
     if (window.AIModel) AIModel.load();
     if (window.AIAssistant) AIAssistant.mount();
+  }
+
+  /**
+   * Compose and send a notification.
+   *
+   * Which audience controls appear depends on what the server said this role
+   * may do: Admin/GM can broadcast to a whole role, a Department Manager is
+   * limited to their department, a Project Manager to named individuals.
+   */
+  async function openNotifCompose(perm) {
+    const user = Auth.getUser();
+    let people = [];
+    try { people = await API.getContacts(); } catch (e) { /* individuals unavailable */ }
+
+    const deptOptions = ((window.DataStore && DataStore.departments) || [])
+      .filter(d => perm.can_broadcast_roles || d.name === user.department)
+      .map(d => `<option value="${Utils.escapeHtml(d.name)}">${Utils.escapeHtml(d.name)}</option>`)
+      .join("");
+
+    const modal = Components.createModal({
+      title: "Send a notification",
+      bodyHtml: `
+        <div class="field">
+          <label for="ntfTitle">Title</label>
+          <input class="input" id="ntfTitle" maxlength="200" placeholder="Site meeting moved to 9am">
+        </div>
+        <div class="field">
+          <label for="ntfBody">Message</label>
+          <textarea class="input" id="ntfBody" rows="3" maxlength="2000" placeholder="What do people need to know?"></textarea>
+        </div>
+        <div class="field">
+          <label for="ntfAudience">Send to</label>
+          <select class="input" id="ntfAudience">
+            <option value="people">Specific people</option>
+            ${perm.can_target_departments ? `<option value="dept">A department</option>` : ""}
+            ${perm.can_broadcast_roles ? `<option value="role">Everyone with a role</option>` : ""}
+          </select>
+        </div>
+        <div class="field" id="ntfPeopleWrap">
+          <label for="ntfPeople">People <span class="text-muted">(ctrl/cmd-click for several)</span></label>
+          <select class="input" id="ntfPeople" multiple size="5">
+            ${people.map(c => `<option value="${Utils.escapeHtml(c.id)}">${Utils.escapeHtml(c.name || c.full_name)} — ${Utils.escapeHtml(c.role)}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field hidden" id="ntfDeptWrap">
+          <label for="ntfDept">Department</label>
+          <select class="input" id="ntfDept">${deptOptions}</select>
+        </div>
+        <div class="field hidden" id="ntfRoleWrap">
+          <label for="ntfRole">Role</label>
+          <select class="input" id="ntfRole">
+            ${Roles.ALL.filter(r => r !== "Client").map(r => `<option value="${r}">${r}</option>`).join("")}
+          </select>
+        </div>
+        <div class="field-hint"><i class="fa-solid fa-circle-info"></i>
+          ${perm.scope === "organization" ? "You can notify anyone in the organization."
+            : perm.scope === "department" ? "You can notify your own department."
+            : "You can notify people on the projects you manage."}
+        </div>`,
+      actionsHtml: `
+        <button class="btn btn-secondary" id="ntfCancel">Cancel</button>
+        <button class="btn btn-primary" id="ntfSend"><i class="fa-solid fa-paper-plane"></i> Send</button>`,
+    });
+
+    const q = (sel) => modal.el.querySelector(sel);
+    q("#ntfAudience").addEventListener("change", (e) => {
+      const v = e.target.value;
+      q("#ntfPeopleWrap").classList.toggle("hidden", v !== "people");
+      q("#ntfDeptWrap").classList.toggle("hidden", v !== "dept");
+      q("#ntfRoleWrap").classList.toggle("hidden", v !== "role");
+    });
+    q("#ntfCancel").addEventListener("click", modal.close);
+
+    q("#ntfSend").addEventListener("click", async (e) => {
+      const title = q("#ntfTitle").value.trim();
+      const body = q("#ntfBody").value.trim();
+      if (!title || !body) {
+        Components.createToast("Add a title and a message.", "error");
+        return;
+      }
+      const mode = q("#ntfAudience").value;
+      const payload = { title, body, user_ids: [], roles: [], departments: [] };
+      if (mode === "people") {
+        payload.user_ids = Array.from(q("#ntfPeople").selectedOptions).map(o => o.value);
+        if (!payload.user_ids.length) {
+          Components.createToast("Choose at least one person.", "error");
+          return;
+        }
+      } else if (mode === "dept") {
+        payload.departments = [q("#ntfDept").value];
+      } else {
+        payload.roles = [q("#ntfRole").value];
+      }
+
+      e.target.disabled = true;
+      try {
+        await API.createNotification(payload);
+        modal.close();
+        Components.createToast("Notification sent.", "success");
+      } catch (err) {
+        e.target.disabled = false;
+        Components.createToast(`Could not send: ${err.message}`, "error");
+      }
+    });
   }
 
   return { render, NAV_GROUPS, refreshNotifications };

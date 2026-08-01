@@ -43,6 +43,9 @@ class User(Base):
     projects_count: Mapped[int] = mapped_column(Integer, default=0)
     on_time_pct: Mapped[int] = mapped_column(Integer, default=90)
     avatar_color: Mapped[str | None] = mapped_column(String(16))
+    # Uploaded profile photo. Stored via services/storage.py (Supabase Storage,
+    # or local disk when that is not configured); this holds the storage key.
+    avatar_url: Mapped[str | None] = mapped_column(String(400))
     client_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("clients.id", ondelete="SET NULL"))
     linked_project: Mapped[str | None] = mapped_column(String(200))
     joined: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -313,3 +316,23 @@ class SavedReport(Base):
     generated_by: Mapped[str | None] = mapped_column(String(160))
     generated_by_id: Mapped[str | None] = mapped_column(String(64), index=True)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class Message(Base):
+    """A direct message between two members.
+
+    Deliberately simple: sender, recipient, body, read flag. Threads are
+    reconstructed by pairing sender/recipient rather than stored, which keeps
+    the schema small and avoids a conversations table nobody queries directly.
+    """
+    __tablename__ = "messages"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    sender_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    sender_name: Mapped[str | None] = mapped_column(String(160))
+    recipient_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    recipient_name: Mapped[str | None] = mapped_column(String(160))
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=utcnow, index=True)

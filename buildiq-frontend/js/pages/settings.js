@@ -29,8 +29,14 @@ const SettingsPage = (() => {
       el.innerHTML = `
         <div class="card">
           <div class="flex items-center gap-16" style="margin-bottom:20px;">
-            ${Components.createAvatar(user.name, "xl")}
-            <div><button class="btn btn-secondary btn-sm">Change Photo</button></div>
+              <div id="avatarPreview">${Components.createAvatar(user.name, "xl")}</div>
+              <div>
+                <button class="btn btn-secondary btn-sm" id="changePhotoBtn">
+                  <i class="fa-solid fa-camera"></i> Change Photo
+                </button>
+                <input type="file" id="avatarFile" accept="image/jpeg,image/png,image/webp,image/gif" class="hidden">
+                <div class="text-muted" style="font-size:11.5px; margin-top:6px;">JPEG, PNG, WebP or GIF · max 2 MB</div>
+              </div>
           </div>
           <div class="field"><label>Full Name</label><input class="input" value="${Utils.escapeHtml(user.name)}"></div>
           <div class="field"><label>Email</label><input class="input" value="${Utils.escapeHtml(user.email)}"></div>
@@ -39,6 +45,50 @@ const SettingsPage = (() => {
           <button class="btn btn-primary" id="saveProfileBtn">Save Changes</button>
         </div>`;
       document.getElementById("saveProfileBtn").addEventListener("click", () => Components.createToast("Profile updated.", "success"));
+
+        // "Change Photo" previously had no handler at all -- clicking it did
+        // nothing. It now opens the file picker and uploads to the server.
+        const photoBtn = document.getElementById("changePhotoBtn");
+        const fileInput = document.getElementById("avatarFile");
+        photoBtn.addEventListener("click", () => fileInput.click());
+
+        fileInput.addEventListener("change", async () => {
+          const file = fileInput.files && fileInput.files[0];
+          if (!file) return;
+
+          // Checked here too, so an oversized file fails instantly rather
+          // than after a slow upload on a phone connection.
+          if (file.size > 2 * 1024 * 1024) {
+            Components.createToast(
+              `That image is ${Math.round(file.size / 1024)} KB; the limit is 2 MB.`, "error");
+            fileInput.value = "";
+            return;
+          }
+
+          const original = photoBtn.innerHTML;
+          photoBtn.disabled = true;
+          photoBtn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Uploading...`;
+
+          // Show the chosen image straight away; revert if the upload fails.
+          const preview = document.getElementById("avatarPreview");
+          const previousHtml = preview.innerHTML;
+          const localUrl = URL.createObjectURL(file);
+          preview.innerHTML = `<img src="${localUrl}" alt="Profile photo" class="avatar avatar-xl" style="object-fit:cover;">`;
+
+          try {
+            await API.uploadAvatar(file);
+            Components.createToast("Photo updated.", "success");
+            AppEvents.logAudit(user, "UPDATE_RECORD", `members/${user.id}/avatar`);
+          } catch (err) {
+            preview.innerHTML = previousHtml;
+            Components.createToast(`Could not upload: ${err.message}`, "error");
+          } finally {
+            URL.revokeObjectURL(localUrl);
+            photoBtn.disabled = false;
+            photoBtn.innerHTML = original;
+            fileInput.value = "";
+          }
+        });
     } else if (tab === "security") {
       el.innerHTML = `
         <div class="card">

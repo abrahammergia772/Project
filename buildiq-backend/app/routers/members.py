@@ -4,7 +4,8 @@ Staff directory, smart search, department assignment, and client records.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status)
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
@@ -16,6 +17,7 @@ from ..schemas import (
     ClientCreate, ClientOut, DepartmentAssign, MemberCreate, MemberOut, MemberUpdate,
     OkResponse, SmartSearchRequest, SmartSearchResult,
 )
+from ..services import storage
 from ..security import (
     ALL_ROLES, AUDITOR, CLIENT, DEPARTMENT_MANAGER, ORG_WIDE, PRIVILEGED_ROLES,
     get_current_user, hash_password,
@@ -221,3 +223,71 @@ def create_client(payload: ClientCreate, user: User = Depends(get_current_user),
 
     record_audit(db, user, "UPDATE_RECORD", f"clients/{client.id}")
     return client
+
+
+# ---------------- Profile photo ----------------
+MAX_AVATAR_BYTES = 2 * 1024 * 1024          # 2 MB
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
+
+
+@router.post("/members/me/avatar")
+async def upload_avatar(file: UploadFile = File(...),
+                        user: User = Depends(get_current_user),
+                        db: Session = Depends(get_db)):
+    """Replace the signed-in user's profile photo.
+
+    Anyone may change their OWN photo -- there is no role check, because this
+    only ever writes to the caller's row. Uploading someone else's avatar is
+    not possible through this endpoint.
+    """
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            f"Unsupported image type: {file.content_type or 'unknown'}. "
+            "Use JPEG, PNG, WebP or GIF.")
+
+    data = await file.read()
+    if not data:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "The file is empty")
+    if len(data) > MAX_AVATAR_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            f"Image is {len(data) // 1024} KB; the limit is "
+            f"{MAX_AVATAR_BYTES // 1024} KB.")
+
+    ext = {"image/jpeg": "jpg", "image/png": "png",
+           "image/webp": "webp", "image/gif": "gif"}[file.content_type]
+    # Overwrite per user rather than accumulating one file per upload.
+    key = f"avatars/{user.id}.{ext}"
+    stored_key, backend = storage.upload(key, data, file.content_type)
+
+    # Record the backend alongside the key: download() needs it, and a
+    # deployment can switch between Supabase Storage and local disk.
+    user.avatar_url = f"{backend}:{stored_key}"
+    record_audit(db, user, "UPDATE_RECORD", f"members/{user.id}/avatar")
+    db.commit()
+
+    return {"ok": True, "avatar_url": stored_key, "backend": backend}
+
+
+@router.get("/members/{member_id}/avatar")
+def get_avatar(member_id: str,
+               user: User = Depends(get_current_user),
+               db: Session = Depends(get_db)):
+    """Stream a member's photo. Requires a session, like every other read."""
+    target = db.get(User, member_id)
+    if target is None or not target.avatar_url:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No photo set")
+
+    backend, _, key = target.avatar_url.partition(":")
+    if not key:                       # legacy value without a backend prefix
+        backend, key = storage.backend_name(), target.avatar_url
+    data = storage.download(key, backend)
+    if data is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Photo unavailable")
+
+    ext = key.rsplit(".", 1)[-1].lower()
+    media = {"jpg": "image/jpeg", "png": "image/png",
+             "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/jpeg")
+    return Response(content=data, media_type=media,
+                    headers={"Cache-Control": "private, max-age=300"})

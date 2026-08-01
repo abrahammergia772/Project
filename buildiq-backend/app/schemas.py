@@ -538,3 +538,44 @@ class DashboardStats(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+
+
+# ---------------- Messages ----------------
+class MessageCreate(BaseModel):
+    recipient_id: str
+    body: str = Field(min_length=1, max_length=4000)
+
+
+class MessageOut(BaseModel):
+    id: str
+    sender_id: str
+    sender_name: str | None = None
+    recipient_id: str
+    recipient_name: str | None = None
+    body: str
+    is_read: bool
+    created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    """One row per person you have exchanged messages with."""
+    user_id: str
+    name: str | None = None
+    role: str | None = None
+    department: str | None = None
+    last_message: str
+    last_at: datetime
+    unread: int
+
+
+# ---------------- Notifications ----------------
+class NotificationCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    body: str = Field(min_length=1, max_length=2000)
+    # Audience. At least one must be non-empty; the router enforces which of
+    # these the caller's role is allowed to use.
+    user_ids: list[str] = []
+    roles: list[str] = []
+    departments: list[str] = []
+    type: str = "info"
+    link: str | None = None

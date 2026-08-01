@@ -20,8 +20,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine
 from .routers import (
     ai, attendance, audit, auth, complaints, departments, documents,
-    members, notifications, projects, reports, tasks,
-)
+    members, notifications, projects, reports, tasks, messages)
 from .services import groq_service, storage
 
 logging.basicConfig(
@@ -179,7 +178,7 @@ async def unhandled_handler(request: Request, exc: Exception):
 # ---------------- Routers ----------------
 for r in (auth.router, members.router, departments.router, projects.router, tasks.router,
           complaints.router, attendance.router, audit.router, notifications.router,
-          documents.router, reports.router, ai.router):
+          documents.router, reports.router, ai.router, messages.router):
     app.include_router(r)
 
 

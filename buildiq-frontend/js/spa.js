@@ -47,6 +47,7 @@ const SPA = (() => {
     documents:       "DocumentsPage",
     chatbot:         "ChatbotPage",
     ai_insights:     "AIInsightsPage",
+    messages:        "MessagesPage",
     settings:        "SettingsPage",
     user_management: "UserManagementPage",
   };
