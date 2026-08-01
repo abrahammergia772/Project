@@ -8,30 +8,67 @@ const Auth = (() => {
   const USER_KEY = "buildiq_user";
   const EXPIRES_KEY = "buildiq_expires";
 
-  function getToken() { return localStorage.getItem(TOKEN_KEY); }
+  /**
+   * Sessions live in sessionStorage, NOT localStorage.
+   *
+   * sessionStorage is scoped to the browser tab: it is cleared when the tab
+   * is closed, so leaving the site and coming back always lands on the login
+   * page. localStorage persisted across browser restarts, which meant a
+   * shared or public device stayed signed in indefinitely.
+   *
+   * A tab refresh keeps the session -- that is the same tab, not a return
+   * visit -- so reloading does not throw the user out mid-task.
+   */
+  const store = (() => {
+    try {
+      sessionStorage.setItem("__t", "1");
+      sessionStorage.removeItem("__t");
+      return sessionStorage;
+    } catch (e) {
+      // Private mode or storage disabled: fall back to an in-memory store so
+      // the app still works for the life of the page.
+      const mem = new Map();
+      return {
+        getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+        setItem: (k, v) => mem.set(k, String(v)),
+        removeItem: (k) => mem.delete(k),
+      };
+    }
+  })();
+
+  // One-time migration: sign out anyone carrying an old localStorage session,
+  // rather than silently keeping them logged in under the new rules.
+  try {
+    if (localStorage.getItem(TOKEN_KEY)) {
+      [TOKEN_KEY, USER_KEY, EXPIRES_KEY, "buildiq_active_role"]
+        .forEach(k => localStorage.removeItem(k));
+    }
+  } catch (e) { /* storage unavailable */ }
+
+  function getToken() { return store.getItem(TOKEN_KEY); }
 
   function getUser() {
-    try { return JSON.parse(localStorage.getItem(USER_KEY)); }
+    try { return JSON.parse(store.getItem(USER_KEY)); }
     catch { return null; }
   }
 
-  function getExpiry() { return Number(localStorage.getItem(EXPIRES_KEY)) || 0; }
+  function getExpiry() { return Number(store.getItem(EXPIRES_KEY)) || 0; }
 
   function isLoggedIn() {
     return !!getToken() && !!getUser() && Date.now() < getExpiry();
   }
 
   function setSession({ token, user, expires }) {
-    localStorage.setItem(TOKEN_KEY, token);
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
-    localStorage.setItem(EXPIRES_KEY, String(expires));
+    store.setItem(TOKEN_KEY, token);
+    store.setItem(USER_KEY, JSON.stringify(user));
+    store.setItem(EXPIRES_KEY, String(expires));
   }
 
   function clearSession() {
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
-    localStorage.removeItem(EXPIRES_KEY);
-    localStorage.removeItem("buildiq_active_role");
+    store.removeItem(TOKEN_KEY);
+    store.removeItem(USER_KEY);
+    store.removeItem(EXPIRES_KEY);
+    store.removeItem(ACTIVE_ROLE_KEY);
   }
 
   async function login(email, password, portal = null) {
@@ -110,8 +147,8 @@ const Auth = (() => {
     const ctx = contextFor(user, role);
     const updated = { ...user, role, department: ctx.department, job_title: ctx.job_title };
 
-    localStorage.setItem(USER_KEY, JSON.stringify(updated));
-    localStorage.setItem(ACTIVE_ROLE_KEY, role);
+    store.setItem(USER_KEY, JSON.stringify(updated));
+    store.setItem(ACTIVE_ROLE_KEY, role);
 
     // Leave a trail — switching hats is a permission-relevant action.
     try {
@@ -127,7 +164,7 @@ const Auth = (() => {
   function restoreActiveRole() {
     const user = getUser();
     if (!user) return;
-    const saved = localStorage.getItem(ACTIVE_ROLE_KEY);
+    const saved = store.getItem(ACTIVE_ROLE_KEY);
     if (saved && saved !== user.role && getRoles().includes(saved)) {
       switchRole(saved);
     }

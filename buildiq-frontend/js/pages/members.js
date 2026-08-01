@@ -213,3 +213,8 @@ const MembersPage = (() => {
 
   return { init };
 })();
+
+// Published for the single-page shell: a top-level `const` creates a
+// script-scope binding, NOT a window property, so SPA's window[name]
+// lookup would otherwise find nothing.
+if (typeof window !== "undefined") window.MembersPage = MembersPage;
