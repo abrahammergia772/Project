@@ -26,7 +26,9 @@ class LoginRequest(BaseModel):
 
 class SignupRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8)
+    # Length only; the real rules live in app/password_policy.py so the
+    # message can reference the user's own name and email.
+    password: str = Field(min_length=10)
     full_name: str = Field(min_length=1, max_length=160)
     role: str = "Engineer"
     department: str | None = None
@@ -78,7 +80,7 @@ class ForgotPasswordResponse(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
-    new_password: str = Field(min_length=8)
+    new_password: str = Field(min_length=10)
 
 
 # ---------------- Members ----------------

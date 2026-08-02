@@ -7,11 +7,11 @@ records the user couldn't already read.
 """
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from .. import ai_engine
+from .. import ai_engine, rate_limit
 from ..config import settings
 from ..database import get_db
 from ..deps import (
@@ -23,7 +23,7 @@ from ..schemas import (
     ChatRequest, ChatResponse, DashboardStats, SearchRequest, SearchResponse,
 )
 from ..security import AUDITOR, CLIENT, ORG_WIDE, PROJECT_MANAGER, get_current_user
-from ..services import groq_service
+from ..services import ai_cache, groq_service
 
 router = APIRouter(tags=["ai"])
 
@@ -64,7 +64,9 @@ def _context_prompt(ctx: dict, user: User) -> str:
 
 
 @router.post("/ai/chat", response_model=ChatResponse)
-def chat(payload: ChatRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def chat(payload: ChatRequest, request: Request,
+         user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rate_limit.enforce(request, rate_limit.AI, extra_key=user.id, by_ip=False)
     ctx = _scoped_context(db, user)
     # An unknown or disallowed id resolves to the default rather than erroring.
     chosen = settings.resolve_model(payload.model)
@@ -81,7 +83,9 @@ def chat(payload: ChatRequest, user: User = Depends(get_current_user), db: Sessi
 
 
 @router.post("/ai/search", response_model=SearchResponse)
-def search(payload: SearchRequest, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def search(payload: SearchRequest, request: Request,
+           user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rate_limit.enforce(request, rate_limit.AI, extra_key=user.id, by_ip=False)
     q = payload.query.lower().strip()
     if not q:
         return SearchResponse()
@@ -115,8 +119,11 @@ def dashboard_stats(user: User = Depends(get_current_user), db: Session = Depend
 
 
 @router.get("/ai/executive-summary")
-def executive_summary(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def executive_summary(request: Request,
+                      user: User = Depends(get_current_user),
+                      db: Session = Depends(get_db)):
     """The natural-language briefing shown at the top of role dashboards."""
+    rate_limit.enforce(request, rate_limit.AI, extra_key=user.id, by_ip=False)
     projects = [project_dict(p, include_team=False) for p in
                 (managed_projects(db, user) if user.role == PROJECT_MANAGER else visible_projects(db, user))]
     complaints = [complaint_dict(c) for c in visible_complaints(db, user)]
@@ -135,9 +142,21 @@ def executive_summary(user: User = Depends(get_current_user), db: Session = Depe
         facts += "- Highest risk: " + ", ".join(
             f"{p['title']} ({p['progress']}% vs {p['expected_progress']}%)" for p in high_risk[:3]) + "\n"
 
+    # Cached on the facts themselves, not on the user id: two managers with
+    # an identical view share the answer, and the moment anything they can
+    # see changes the key changes with it. Role is in the key because the
+    # prompt is written differently per role.
+    cache_key = ai_cache.make_key("exec-summary", user.role, facts)
+    cached = ai_cache.get(cache_key)
+    if cached is not None:
+        return {"summary": cached, "ai_source": "groq", "cached": True}
+
     summary = groq_service.executive_summary(facts, user.role)
     if summary:
-        return {"summary": summary, "ai_source": "groq"}
+        # Only real LLM output is cached -- pinning the fallback would keep
+        # the degraded answer for the full TTL after the provider recovers.
+        ai_cache.set(cache_key, summary)
+        return {"summary": summary, "ai_source": "groq", "cached": False}
 
     # Deterministic fallback
     parts = [f"You have {len(projects)} project(s) in view."]

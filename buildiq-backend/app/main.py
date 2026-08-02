@@ -181,8 +181,13 @@ app = FastAPI(
         "AI features call Groq with a deterministic local fallback."
     ),
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
+    # The interactive docs enumerate every endpoint and schema in the system,
+    # which is a free reconnaissance map for an attacker. They are invaluable
+    # in development and have no business on a public production service, so
+    # they are switched off by ENV rather than left to be remembered.
+    docs_url=None if settings.is_production else "/docs",
+    redoc_url=None if settings.is_production else "/redoc",
+    openapi_url=None if settings.is_production else "/openapi.json",
 )
 
 app.add_middleware(
@@ -201,6 +206,28 @@ async def timing_header(request: Request, call_next):
     started = time.perf_counter()
     response = await call_next(request)
     response.headers["X-Response-Time-ms"] = f"{(time.perf_counter() - started) * 1000:.1f}"
+
+    # --- Security headers ---
+    # This is a JSON API, not a site that serves HTML to a browser, so the set
+    # is deliberately small: headers that do nothing here (like a full CSP for
+    # rendered pages) would just be cargo cult.
+    #
+    # nosniff matters most: without it a browser may re-interpret a JSON error
+    # body or an uploaded file as HTML and execute it.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    # Uploaded documents are streamed from this origin; deny framing so they
+    # cannot be embedded in a hostile page.
+    response.headers["X-Frame-Options"] = "DENY"
+    # Do not leak API paths (which contain record ids) to third-party sites.
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cross-Origin-Resource-Policy"] = "same-site"
+    response.headers["Permissions-Policy"] = "geolocation=(), microphone=(), camera=()"
+
+    if settings.is_production:
+        # Only in production: sending HSTS from a local http:// dev server can
+        # pin a developer's browser to https for localhost and break it.
+        response.headers["Strict-Transport-Security"] = (
+            "max-age=31536000; includeSubDomains")
     return response
 
 
@@ -261,4 +288,9 @@ def health():
 
 @app.get("/", tags=["meta"])
 def root():
-    return {"name": settings.APP_NAME, "version": settings.APP_VERSION, "docs": "/docs"}
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        # Honest about the docs being disabled rather than advertising a 404.
+        "docs": None if settings.is_production else "/docs",
+    }

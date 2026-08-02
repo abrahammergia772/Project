@@ -300,10 +300,10 @@
             </div>
             <div class="strength-label" id="strengthLabel" style="color:var(--text-muted);">Password strength</div>
             <div class="req-list" id="reqList">
-              <div class="req-item" data-req="len"><i class="fa-solid fa-circle-xmark"></i> At least 8 characters</div>
-              <div class="req-item" data-req="upper"><i class="fa-solid fa-circle-xmark"></i> One uppercase letter</div>
+              <div class="req-item" data-req="len"><i class="fa-solid fa-circle-xmark"></i> At least 10 characters</div>
+              <div class="req-item" data-req="letter"><i class="fa-solid fa-circle-xmark"></i> One letter</div>
               <div class="req-item" data-req="num"><i class="fa-solid fa-circle-xmark"></i> One number</div>
-              <div class="req-item" data-req="special"><i class="fa-solid fa-circle-xmark"></i> One special character</div>
+              <div class="req-item" data-req="notcommon"><i class="fa-solid fa-circle-xmark"></i> Not a common password</div>
             </div>
 
             <div class="field">
@@ -544,11 +544,13 @@
   const resetSegs = Utils.qsa(".reset-seg");
   const resetStrengthLabel = document.getElementById("resetStrengthLabel");
   function checkResetPassword(pw) {
+    // Same policy as signup -- the reset form used to accept passwords the
+    // API would then reject.
     const checks = {
-      len: pw.length >= 8,
-      upper: /[A-Z]/.test(pw),
+      len: pw.length >= 10,
+      letter: /[A-Za-z]/.test(pw),
       num: /[0-9]/.test(pw),
-      special: /[^A-Za-z0-9]/.test(pw),
+      strong: pw.length >= 14 || /[^A-Za-z0-9]/.test(pw),
     };
     const score = Object.values(checks).filter(Boolean).length;
     const colors = ["var(--red)", "var(--red)", "var(--yellow)", "var(--green)", "var(--green)"];
@@ -566,7 +568,11 @@
     const confirm = document.getElementById("resetConfirm").value;
     const err = document.getElementById("resetError");
 
-    if (checkResetPassword(pw) < 3) { Components.createToast("Please choose a stronger password.", "error"); return; }
+    const resetProblems = passwordProblems(pw);
+    if (resetProblems.length) {
+      Components.createToast(`Password needs ${resetProblems.join(", ")}.`, "error");
+      return;
+    }
     if (pw !== confirm) { err.classList.remove("hidden"); return; }
     err.classList.add("hidden");
 
@@ -879,12 +885,53 @@
   const strengthLabel = document.getElementById("strengthLabel");
   const reqItems = Utils.qsa(".req-item");
 
+  // Mirrors app/password_policy.py. The server is still the enforcement
+  // point -- this exists so people find out BEFORE submitting, rather than
+  // being bounced by a 422. The two must agree: the meter previously said
+  // "8 characters" while the API required 10.
+  const COMMON_PASSWORDS = new Set([
+    "password", "password1", "password12", "password123", "password1234",
+    "passw0rd", "letmein", "welcome", "welcome1", "qwerty", "qwerty123",
+    "qwertyuiop", "123456", "1234567", "12345678", "123456789", "1234567890",
+    "111111", "000000", "abc123", "abcd1234", "iloveyou", "admin", "admin123",
+    "administrator", "root", "changeme", "secret", "monkey", "dragon",
+    "sunshine", "princess", "football", "baseball", "master", "shadow",
+    "superman", "trustno1", "buildiq", "buildiq123", "construction",
+    "construction123", "demo1234", "test1234", "temp1234",
+  ]);
+  const SEQUENCES = ["abcdefghijklmnopqrstuvwxyz", "0123456789", "qwertyuiop", "asdfghjkl"];
+
+  function passwordProblems(pw) {
+    const flat = pw.toLowerCase().replace(/[^a-z0-9]/g, "");
+    const problems = [];
+    if (pw.length < 10) problems.push("at least 10 characters");
+    if (!/[A-Za-z]/.test(pw)) problems.push("a letter");
+    if (!/[0-9]/.test(pw)) problems.push("a number");
+    if (COMMON_PASSWORDS.has(flat) || COMMON_PASSWORDS.has(pw.toLowerCase()))
+      problems.push("something less common");
+    if (/(.)\1{3,}/.test(pw)) problems.push("no character four times in a row");
+    for (const seq of SEQUENCES) {
+      for (let i = 0; i <= seq.length - 5; i++) {
+        const chunk = seq.slice(i, i + 5);
+        const rev = chunk.split("").reverse().join("");
+        if (pw.toLowerCase().includes(chunk) || pw.toLowerCase().includes(rev)) {
+          problems.push("no run like '12345' or 'abcde'");
+          i = seq.length;
+          break;
+        }
+      }
+    }
+    return [...new Set(problems)];
+  }
+
   function checkPassword(pw) {
+    const flat = pw.toLowerCase().replace(/[^a-z0-9]/g, "");
     const checks = {
-      len: pw.length >= 8,
-      upper: /[A-Z]/.test(pw),
+      len: pw.length >= 10,
+      letter: /[A-Za-z]/.test(pw),
       num: /[0-9]/.test(pw),
-      special: /[^A-Za-z0-9]/.test(pw),
+      notcommon: pw.length > 0 && !COMMON_PASSWORDS.has(flat)
+                 && !COMMON_PASSWORDS.has(pw.toLowerCase()),
     };
     reqItems.forEach(item => {
       const met = checks[item.dataset.req];
@@ -907,7 +954,13 @@
     const password = document.getElementById("signupPassword").value;
     const confirm = document.getElementById("confirmPassword").value;
     const terms = document.getElementById("termsCheck").checked;
-    if (checkPassword(password) < 3) { Components.createToast("Please choose a stronger password.", "error"); return; }
+    const pwProblems = passwordProblems(password);
+    if (pwProblems.length) {
+      // Naming the missing requirement beats "choose a stronger password",
+      // which leaves people guessing which rule they broke.
+      Components.createToast(`Password needs ${pwProblems.join(", ")}.`, "error");
+      return;
+    }
     if (password !== confirm) { Components.createToast("Passwords do not match.", "error"); return; }
     if (!terms) { Components.createToast("Please accept the Terms of Service.", "error"); return; }
 

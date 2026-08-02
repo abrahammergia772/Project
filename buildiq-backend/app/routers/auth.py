@@ -7,12 +7,14 @@ from __future__ import annotations
 import secrets
 from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from .. import rate_limit
 from ..config import settings
 from ..database import get_db
+from ..password_policy import PasswordPolicyError, validate_password
 from ..deps import new_id, record_audit, utcnow
 from ..models import Client, PasswordResetToken, User
 from ..schemas import (
@@ -77,7 +79,11 @@ def _token_response(u: User) -> TokenResponse:
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    # Two counters: one per source address, one per targeted email. Either
+    # alone is easy to sidestep -- see app/rate_limit.py.
+    rate_limit.enforce(request, rate_limit.LOGIN, extra_key=payload.email)
+
     user = db.scalar(select(User).where(User.email == payload.email.lower()))
     # Never reveal whether the email exists.
     if user is None or not verify_password(payload.password, user.hashed_password):
@@ -87,6 +93,11 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     # Label the entrance so an auditor can see how an oversight account got in
     # -- e.g. a Super Admin arriving via the public staff page is worth noticing.
+    # A correct password clears the counters, so someone who simply forgot
+    # their password is not locked out for five minutes after getting it right.
+    rate_limit.clear(rate_limit.LOGIN,
+                     ip=rate_limit.client_ip(request), extra_key=payload.email)
+
     via_admin_portal = (payload.portal or "").lower() == "admin"
     record_audit(
         db, user,
@@ -97,7 +108,18 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/signup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def signup(payload: SignupRequest, db: Session = Depends(get_db)):
+def signup(payload: SignupRequest, request: Request, db: Session = Depends(get_db)):
+    rate_limit.enforce(request, rate_limit.SIGNUP)
+
+    # Checked here rather than in the schema so the message can reference the
+    # user's own name and email -- "cannot contain your name" is only possible
+    # once both fields are known.
+    try:
+        validate_password(payload.password, email=payload.email,
+                          full_name=payload.full_name)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+
     if payload.role not in ALL_ROLES:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"Unknown role: {payload.role}")
     # Self-service signup must never mint a privileged account.
@@ -188,12 +210,15 @@ def logout(user: User = Depends(get_current_user), db: Session = Depends(get_db)
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db)):
+def forgot_password(payload: ForgotPasswordRequest, request: Request,
+                    db: Session = Depends(get_db)):
     """
     Always reports success so this can't be used to enumerate accounts.
     Outside production the token is returned directly so the flow is walkable
     without a mail server.
     """
+    rate_limit.enforce(request, rate_limit.FORGOT_PASSWORD, extra_key=payload.email)
+
     email = payload.email.lower()
     user = db.scalar(select(User).where(User.email == email))
     generic = "If that email exists, a reset link has been sent."
@@ -213,7 +238,9 @@ def forgot_password(payload: ForgotPasswordRequest, db: Session = Depends(get_db
 
 
 @router.post("/reset-password", response_model=OkResponse)
-def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db)):
+def reset_password(payload: ResetPasswordRequest, request: Request,
+                   db: Session = Depends(get_db)):
+    rate_limit.enforce(request, rate_limit.RESET_PASSWORD)
     entry = db.get(PasswordResetToken, payload.token)
     if entry is None or entry.used:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid.")
@@ -227,6 +254,16 @@ def reset_password(payload: ResetPasswordRequest, db: Session = Depends(get_db))
     user = db.scalar(select(User).where(User.email == entry.email))
     if user is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "This reset link is invalid.")
+
+    # The same policy as signup. Without this, the reset flow was a way to
+    # set a two-character password on any account and bypass the rules
+    # entirely -- a policy enforced on only one of two write paths is not a
+    # policy.
+    try:
+        validate_password(payload.new_password, email=user.email,
+                          full_name=user.full_name)
+    except PasswordPolicyError as exc:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
 
     user.hashed_password = hash_password(payload.new_password)
     entry.used = True

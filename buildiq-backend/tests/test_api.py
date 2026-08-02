@@ -119,9 +119,11 @@ def test_password_reset_round_trip(client):
 
     assert client.post("/auth/reset-password",
                        json={"token": token, "new_password": "BrandNewPass9!"}).status_code == 200
-    # single-use
+    # single-use. The replacement password must itself satisfy the policy,
+    # or this asserts 422 (rejected password) instead of 400 (spent token)
+    # and stops testing single-use at all.
     assert client.post("/auth/reset-password",
-                       json={"token": token, "new_password": "Another1!"}).status_code == 400
+                       json={"token": token, "new_password": "Another-Pass-31"}).status_code == 400
     # the new password works
     assert client.post("/auth/login", json={"email": email, "password": "BrandNewPass9!"}).status_code == 200
 
