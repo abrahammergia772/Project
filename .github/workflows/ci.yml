@@ -1,0 +1,135 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# A new push to the same branch cancels the previous run rather than queueing
+# behind it.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # Must match PYTHON_VERSION in render.yaml, so CI cannot pass on a
+          # version the deployment never runs.
+          python-version: "3.13.4"
+          cache: pip
+          cache-dependency-path: |
+            buildiq-backend/requirements.txt
+            buildiq-backend/requirements-dev.txt
+
+      - name: Install dependencies
+        working-directory: buildiq-backend
+        # requirements-dev.txt includes pglast. Without it the 36 schema
+        # tests SKIP silently instead of failing, and schema drift ships.
+        run: pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Run tests
+        working-directory: buildiq-backend
+        env:
+          # SQLite is opt-in and test-only; the app refuses to boot without
+          # a real DATABASE_URL otherwise.
+          ALLOW_SQLITE: "true"
+          SECRET_KEY: ci-only-not-a-real-secret
+          DATABASE_URL: sqlite:///./ci.db
+        run: python -m pytest -q
+
+      - name: Fail if the schema tests were skipped
+        working-directory: buildiq-backend
+        env:
+          ALLOW_SQLITE: "true"
+          SECRET_KEY: ci-only-not-a-real-secret
+          DATABASE_URL: sqlite:///./ci.db
+        # A silent skip looks identical to a pass in the summary line. This
+        # makes the failure mode explicit.
+        run: |
+          python -m pytest tests/test_schema.py -q --no-header -rs 2>&1 | tee out.txt
+          if grep -qi "skipped" out.txt; then
+            echo "::error::Schema tests skipped — pglast is missing."
+            exit 1
+          fi
+
+  frontend:
+    name: Frontend checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Syntax-check every script
+        working-directory: buildiq-frontend
+        # The frontend has no build step, so nothing else would ever catch a
+        # syntax error before it reaches a browser.
+        run: |
+          fail=0
+          for f in js/*.js js/pages/*.js; do
+            node --check "$f" || { echo "::error file=$f::syntax error"; fail=1; }
+          done
+          exit $fail
+
+      - name: Every page module must be published to window
+        working-directory: buildiq-frontend
+        # A top-level `const XPage = ...` is a script-scope binding, not a
+        # window property, and js/spa.js looks up window[name]. Forgetting
+        # this line renders "Page unavailable" on every SPA page.
+        run: |
+          fail=0
+          for f in js/pages/*.js; do
+            name=$(basename "$f" .js)
+            if ! grep -q "window\.[A-Za-z]*Page *=" "$f"; then
+              echo "::error file=$f::missing 'window.XPage = XPage' export"
+              fail=1
+            fi
+          done
+          exit $fail
+
+      - name: Page modules referenced by the shell must exist
+        working-directory: buildiq-frontend
+        run: |
+          fail=0
+          grep -o 'src="js/[^"]*"' app.html | sed 's/src="//;s/"//' | while read -r f; do
+            [ -f "$f" ] || { echo "::error::app.html references missing $f"; exit 1; }
+          done
+
+  guardrails:
+    name: Deployment guardrails
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: render.yaml must be at the repo root
+        # Render only reads a Blueprint from the root. It lived in
+        # buildiq-backend/ once and every deploy failed with
+        # "Could not open requirements file".
+        run: test -f render.yaml
+
+      - name: Runtime must not depend on training-only packages
+        run: |
+          for pkg in scikit-learn joblib numpy; do
+            if grep -qi "^$pkg" buildiq-backend/requirements.txt; then
+              echo "::error::$pkg belongs in requirements-ml.txt, not requirements.txt"
+              exit 1
+            fi
+          done
+
+      - name: No secrets committed
+        run: |
+          if git grep -nE 'github_pat_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{32,}|gsk_[A-Za-z0-9]{30,}' \
+               -- ':!*.md' ':!.github/*'; then
+            echo "::error::A credential looks committed."
+            exit 1
+          fi
