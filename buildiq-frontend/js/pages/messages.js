@@ -80,22 +80,34 @@ const MessagesPage = (() => {
     catch (err) { conversations = []; console.error("[messages] conversations:", err.message); }
   }
 
-  /** Refresh without disturbing what the user is reading or typing. */
+  /** Refresh without disturbing what the user is reading or typing.
+   *
+   *  Both renderList() and paintBubbles() no-op when nothing changed, so a
+   *  quiet poll now touches the DOM only when a real message arrives. The
+   *  old version saved and restored the draft text by hand because it
+   *  destroyed the composer every time -- it no longer does, so the caret,
+   *  the selection and the scroll position all survive on their own. */
   async function refreshQuietly() {
     if (!document.getElementById("msgList")) { clearInterval(poller); return; }
-    const draft = document.getElementById("msgInput")?.value || "";
     await loadConversations();
     renderList();
-    if (activeId) {
-      await renderThread();
-      const box = document.getElementById("msgInput");
-      if (box && draft) box.value = draft;
-    }
+    if (activeId) await paintBubbles();
   }
+
+  let listSig = null;
 
   function renderList() {
     const el = document.getElementById("msgList");
     if (!el) return;
+
+    // The 20s poll called this unconditionally, replacing the whole list with
+    // identical markup. That restarted the row transitions (the conversation
+    // box appearing to blink) and dropped the avatar images long enough to
+    // re-fetch. Repaint only when something actually differs.
+    const sig = JSON.stringify(conversations.map(
+      c => [c.user_id, c.last_message, c.last_at, c.unread])) + "|" + activeId;
+    if (sig === listSig && el.querySelector(".msg-row, .empty-state")) return;
+    listSig = sig;
 
     if (!conversations.length) {
       el.innerHTML = `
@@ -121,16 +133,104 @@ const MessagesPage = (() => {
         </button>`).join("")}`;
 
     Utils.qsa(".msg-row", el).forEach(b =>
-      b.addEventListener("click", () => { activeId = b.dataset.id; renderList(); renderThread(); }));
+      b.addEventListener("click", () => {
+        if (b.dataset.id === activeId) return;   // already open; do nothing
+        activeId = b.dataset.id;
+        renderList();
+        renderThread();
+      }));
+    if (window.Avatars) Avatars.hydrate(el);
   }
 
-  async function renderThread() {
+  /* Rendering the thread is split in two.
+
+     renderThread() builds the SHELL -- header, bubble container, composer --
+     and only when the conversation actually changes. paintBubbles() replaces
+     just the messages.
+
+     It used to be one function that rewrote the whole pane on every send and
+     on every 20-second poll. That destroyed and recreated the composer under
+     the user's cursor, which is the flicker: the box you were typing in
+     vanished and a new one appeared, losing focus, the caret position and
+     any text selection. Rebuilding the header also re-triggered the avatar
+     fetch, so the picture blinked too. */
+  let renderedFor = null;          // which conversation the shell belongs to
+
+  function threadHeader(who, name) {
+    return `
+      <div class="msg-thread-head">
+        ${Components.createAvatar(name, "sm", null, activeId)}
+        <div>
+          <div class="msg-thread-name">${esc(name)}</div>
+          <div class="msg-thread-sub">${esc(who.role || "")}${who.department ? " · " + esc(who.department) : ""}</div>
+        </div>
+      </div>`;
+  }
+
+  function bubblesHtml(msgs) {
+    if (!msgs.length) return `<div class="msg-empty-thread">No messages yet. Say hello.</div>`;
+    return msgs.map(m => `
+      <div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
+        <div class="msg-bubble-body">${esc(m.body)}</div>
+        <div class="msg-bubble-time">${when(m.created_at)}</div>
+      </div>`).join("");
+  }
+
+  /** True when the user is already at (or near) the newest message.
+   *  Only then should new arrivals scroll the view -- yanking someone back
+   *  to the bottom while they are reading history is its own bug. */
+  function atBottom(box) {
+    if (!box) return true;
+    return box.scrollHeight - box.scrollTop - box.clientHeight < 80;
+  }
+
+  function scrollToLatest(box) {
+    if (!box) return;
+    // On the stacked mobile layout the bubbles are not a scroll container --
+    // the page is. Scrolling the element would silently do nothing there.
+    const scrolls = box.scrollHeight > box.clientHeight + 4;
+    if (scrolls) box.scrollTop = box.scrollHeight;
+    // Optional-call: scrollIntoView is not implemented everywhere (jsdom,
+    // older browsers), and this is a nicety, not a requirement.
+    else document.getElementById("msgInput")?.scrollIntoView?.({ block: "nearest" });
+  }
+
+  async function paintBubbles({ force = false } = {}) {
+    const box = document.getElementById("msgBubbles");
+    if (!box) return;
+
+    let msgs = [];
+    try { msgs = await API.getThread(activeId); }
+    catch (err) { console.error("[messages] thread:", err.message); return; }
+
+    const next = bubblesHtml(msgs);
+    // Skip the DOM write when nothing changed. Without this the 20s poll
+    // repaints identical markup, which restarts CSS transitions and makes
+    // the thread visibly twitch on a timer.
+    if (!force && box.dataset.sig === String(next.length) && box.innerHTML === next) return;
+
+    const stick = atBottom(box);
+    box.innerHTML = next;
+    box.dataset.sig = String(next.length);
+    if (window.Avatars) Avatars.hydrate(box);
+    if (stick || force) scrollToLatest(box);
+  }
+
+  async function renderThread({ force = false } = {}) {
     const el = document.getElementById("msgThread");
     if (!el) return;
 
     if (!activeId) {
+      renderedFor = null;
       el.innerHTML = Components.createEmptyState("fa-comment-dots", "Select a conversation",
         "Choose someone on the left, or start a new message.");
+      return;
+    }
+
+    // Same conversation as last time: leave the shell (and the composer the
+    // user may be typing in) exactly where it is.
+    if (renderedFor === activeId && document.getElementById("msgBubbles")) {
+      await paintBubbles({ force });
       return;
     }
 
@@ -139,35 +239,16 @@ const MessagesPage = (() => {
       || { name: "Member" };
     const name = who.name || who.full_name || "Member";
 
-    let msgs = [];
-    try { msgs = await API.getThread(activeId); }
-    catch (err) { console.error("[messages] thread:", err.message); }
-
     el.innerHTML = `
-      <div class="msg-thread-head">
-        ${Components.createAvatar(name, "sm", null, activeId)}
-        <div>
-          <div class="msg-thread-name">${esc(name)}</div>
-          <div class="msg-thread-sub">${esc(who.role || "")}${who.department ? " · " + esc(who.department) : ""}</div>
-        </div>
-      </div>
-      <div class="msg-bubbles" id="msgBubbles">
-        ${msgs.length ? msgs.map(m => `
-          <div class="msg-bubble ${m.sender_id === user.id ? "mine" : "theirs"}">
-            <div class="msg-bubble-body">${esc(m.body)}</div>
-            <div class="msg-bubble-time">${when(m.created_at)}</div>
-          </div>`).join("")
-          : `<div class="msg-empty-thread">No messages yet. Say hello.</div>`}
-      </div>
+      ${threadHeader(who, name)}
+      <div class="msg-bubbles" id="msgBubbles"></div>
       <form class="msg-compose" id="msgForm">
         <textarea class="input" id="msgInput" rows="1" placeholder="Write a message..."></textarea>
-        <button class="btn btn-primary" type="submit" id="msgSend">
+        <button class="btn btn-primary" type="submit" id="msgSend" aria-label="Send">
           <i class="fa-solid fa-paper-plane"></i>
         </button>
       </form>`;
-
-    const bubbles = document.getElementById("msgBubbles");
-    if (bubbles) bubbles.scrollTop = bubbles.scrollHeight;
+    renderedFor = activeId;
 
     const form = document.getElementById("msgForm");
     const input = document.getElementById("msgInput");
@@ -175,6 +256,12 @@ const MessagesPage = (() => {
     // Enter sends, Shift+Enter makes a new line.
     input.addEventListener("keydown", (e) => {
       if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
+    });
+
+    // Grow with the text instead of scrolling a one-line box.
+    input.addEventListener("input", () => {
+      input.style.height = "auto";
+      input.style.height = Math.min(120, input.scrollHeight) + "px";
     });
 
     form.addEventListener("submit", async (e) => {
@@ -185,11 +272,15 @@ const MessagesPage = (() => {
       const btn = document.getElementById("msgSend");
       btn.disabled = true;
       input.value = "";
+      input.style.height = "auto";
       try {
         await API.sendMessage(activeId, body);
         await loadConversations();
         renderList();
-        await renderThread();
+        // force: after sending, always jump to your own message.
+        await paintBubbles({ force: true });
+        // Keep the caret where the user left it so they can keep typing.
+        input.focus();
       } catch (err) {
         input.value = body;               // don't lose what they typed
         Components.createToast(`Could not send: ${err.message}`, "error");
@@ -198,6 +289,8 @@ const MessagesPage = (() => {
         if (b) b.disabled = false;
       }
     });
+
+    await paintBubbles({ force: true });
   }
 
   // ---------------- New message: searchable recipient picker ----------------

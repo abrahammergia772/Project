@@ -72,26 +72,42 @@ const ChatbotPage = (() => {
     }));
   }
 
+  /* On the stacked mobile layout .chat-messages is not a scroll container --
+     the page is. Setting scrollTop on an element that does not overflow is a
+     silent no-op, so new replies would land off-screen with no way to tell
+     why. Scroll whichever one actually moves. */
+  function scrollToLatest(row) {
+    const messages = document.getElementById("chatMessages");
+    if (!messages) return;
+    if (messages.scrollHeight > messages.clientHeight + 4) {
+      messages.scrollTop = messages.scrollHeight;
+    } else if (row) {
+      // Optional-call: not implemented in every environment (jsdom, older
+      // browsers). components.js guards the same way.
+      row.scrollIntoView?.({ block: "nearest" });
+    }
+  }
+
   function addMessage(role, text) {
     const messages = document.getElementById("chatMessages");
     const row = document.createElement("div");
-    row.className = `msg-row ${role}`;
+    row.className = `chat-row ${role}`;
     row.innerHTML = `
-      <div class="msg-avatar">${role === "user" ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-robot"></i>'}</div>
-      <div class="msg-bubble">${Utils.escapeHtml(text).replace(/\n/g,"<br>").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")}</div>`;
+      <div class="chat-avatar">${role === "user" ? '<i class="fa-solid fa-user"></i>' : '<i class="fa-solid fa-robot"></i>'}</div>
+      <div class="chat-bubble">${Utils.escapeHtml(text).replace(/\n/g,"<br>").replace(/\*\*(.+?)\*\*/g,"<b>$1</b>")}</div>`;
     messages.appendChild(row);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToLatest(row);
     return row;
   }
 
   function addTyping() {
     const messages = document.getElementById("chatMessages");
     const row = document.createElement("div");
-    row.className = "msg-row ai";
+    row.className = "chat-row ai";
     row.id = "typingRow";
-    row.innerHTML = `<div class="msg-avatar"><i class="fa-solid fa-robot"></i></div><div class="msg-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
+    row.innerHTML = `<div class="chat-avatar"><i class="fa-solid fa-robot"></i></div><div class="chat-bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div>`;
     messages.appendChild(row);
-    messages.scrollTop = messages.scrollHeight;
+    scrollToLatest(row);
   }
 
   async function sendMessage() {

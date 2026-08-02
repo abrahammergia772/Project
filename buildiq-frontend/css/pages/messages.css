@@ -9,8 +9,15 @@
   gap: 16px;
   align-items: start;
   /* Fill the viewport below the topbar so the thread scrolls internally
-     rather than pushing the page down. */
+     rather than pushing the page down.
+
+     100dvh, not 100vh: on mobile browsers 100vh is the height WITH the
+     address bar hidden, so a vh-based layout is taller than the visible
+     area and the bottom of the page (here, the message input) sits under
+     the chrome until you scroll. dvh tracks the actual visible viewport.
+     The vh line is kept first as a fallback for browsers without dvh. */
   height: calc(100vh - var(--topbar-h) - 120px);
+  height: calc(100dvh - var(--topbar-h) - 120px);
   min-height: 420px;
 }
 
@@ -90,12 +97,28 @@
 /* ---------- Mobile: one pane at a time would need routing state, so the
      list sits above the thread instead. ---------- */
 @media (max-width: 860px) {
+  /* One column. `height: auto` here is deliberate: with both panes stacked
+     there is not enough room to give the thread its own scroll region, so
+     the PAGE scrolls instead. Previously the thread kept an internal
+     scroller while the page could not move, which is why only the bubbles
+     scrolled and the header, conversation list and composer were stranded. */
   .msg-layout {
     grid-template-columns: 1fr;
     height: auto;
+    min-height: 0;
   }
   .msg-list { max-height: 260px; }
-  .msg-thread { min-height: 420px; }
+  /* No fixed height: the thread grows with its content and the page scrolls.
+     min-height would re-introduce the trapped-scroller problem on short
+     conversations. */
+  .msg-thread { height: auto; min-height: 0; }
+  .msg-bubbles {
+    /* Let the bubbles flow into the page rather than into a nested
+       scrollbar-inside-a-scrollbar. */
+    overflow-y: visible;
+    max-height: none;
+    flex: none;
+  }
   .msg-bubble { max-width: 88%; }
 }
 
