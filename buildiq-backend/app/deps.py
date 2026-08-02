@@ -268,6 +268,8 @@ def complaint_dict(c: Complaint) -> dict:
         "customer_name": c.customer_name, "category": c.category, "severity": c.severity,
         "status": c.status, "department": c.department, "project": c.project, "text": c.text,
         "sentiment": c.sentiment, "ai_summary": c.ai_summary, "confidence": c.confidence,
+        "audit_type": getattr(c, "audit_type", None),
+        "audit_type_confidence": getattr(c, "audit_type_confidence", None),
         "assignee": c.assignee, "resolution_note": c.resolution_note,
         "created_at": c.created_at, "resolved_at": c.resolved_at,
     }

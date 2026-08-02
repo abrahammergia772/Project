@@ -14,8 +14,12 @@ from .. import ai_engine
 from ..database import get_db
 from ..deps import record_audit
 from ..models import AuditLog, User
-from ..schemas import AuditFeedbackRequest, AuditLogOut, OkResponse
+from ..schemas import (
+    AuditFeedbackRequest, AuditLogOut, ClassifyTextRequest, ClassifyTextResponse,
+    OkResponse,
+)
 from ..security import AUDITOR, ORG_WIDE, get_current_user
+from ..services import audit_classifier
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -32,6 +36,41 @@ def audit_types(user: User = Depends(get_current_user)):
     """The seven audit types, their signals and the ML technique behind each."""
     _guard(user)
     return [{"key": key, **meta} for key, meta in ai_engine.AUDIT_TYPES.items()]
+
+
+@router.post("/classify", response_model=ClassifyTextResponse)
+def classify_text(payload: ClassifyTextRequest,
+                  user: User = Depends(get_current_user)):
+    """Sort a free-text note into one of the seven audit types.
+
+    Structured events never need this -- an action code maps to its type by
+    lookup. This is for text a person typed, where no lookup is possible:
+    a complaint body, an inspection note, an imported remark.
+
+    The response always carries a confidence and an `is_confident` flag. The
+    training data contains genuinely ambiguous notes ("flagged item" is
+    labelled as all seven types), so a low score usually means the text is
+    undecidable rather than the model being broken -- route those to a human.
+    """
+    _guard(user)
+    result = audit_classifier.classify(payload.text)
+    meta = ai_engine.AUDIT_TYPES.get(result["audit_type"], {})
+    return ClassifyTextResponse(
+        audit_type=result["audit_type"],
+        label=meta.get("label", result["audit_type"]),
+        confidence=result["confidence"],
+        is_confident=result["is_confident"],
+        source=result["source"],
+        alternatives=[{"audit_type": t, "confidence": c}
+                      for t, c in result["alternatives"]],
+    )
+
+
+@router.get("/classifier-status")
+def classifier_status(user: User = Depends(get_current_user)):
+    """Whether the trained model is live or the keyword fallback is running."""
+    _guard(user)
+    return audit_classifier.status()
 
 
 @router.get("/logs", response_model=list[AuditLogOut])

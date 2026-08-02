@@ -274,6 +274,11 @@ create table if not exists public.complaints (
     sentiment          varchar(32),
     ai_summary         text,
     confidence         integer not null default 80,
+    -- Which of the seven audit types this complaint belongs to, predicted
+    -- from its text by services/audit_classifier.py. Nullable: older rows
+    -- predate the classifier and ambiguous text is left untagged.
+    audit_type         varchar(32),
+    audit_type_confidence double precision,
     assignee           varchar(160),
     resolution_note    text not null default '',
     created_at         timestamptz not null default now(),
@@ -281,13 +286,21 @@ create table if not exists public.complaints (
 
     constraint ck_complaints_severity check (severity in ('low','medium','high','critical')),
     constraint ck_complaints_status   check (status in ('pending','in_progress','resolved')),
-    constraint ck_complaints_confidence check (confidence between 0 and 100)
+    constraint ck_complaints_confidence check (confidence between 0 and 100),
+    -- UPPERCASE here, matching projects.delay_risk and audit_logs.risk_level.
+    -- Note complaints.severity above is lowercase; that inconsistency is
+    -- pre-existing, so match the column you are writing to.
+    constraint ck_complaints_audit_type check (audit_type is null or audit_type in (
+        'SECURITY','FINANCIAL','COMPLIANCE','USER_ACTIVITY',
+        'DATA_INTEGRITY','PROJECT_RESOURCE','REPORT_DOCUMENT'
+    ))
 );
 create index if not exists ix_complaints_submitted_by on public.complaints (submitted_by);
 create index if not exists ix_complaints_category     on public.complaints (category);
 create index if not exists ix_complaints_severity     on public.complaints (severity);
 create index if not exists ix_complaints_status       on public.complaints (status);
 create index if not exists ix_complaints_department   on public.complaints (department);
+create index if not exists ix_complaints_audit_type   on public.complaints (audit_type);
 create index if not exists ix_complaints_created_at   on public.complaints (created_at);
 
 -- ----------------------------------------------------------------------------

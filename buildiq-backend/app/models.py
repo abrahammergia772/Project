@@ -234,6 +234,11 @@ class Complaint(Base):
     sentiment: Mapped[str | None] = mapped_column(String(32))
     ai_summary: Mapped[str | None] = mapped_column(Text)
     confidence: Mapped[int] = mapped_column(Integer, default=80)
+    # Which of the seven audit types this complaint belongs to, predicted from
+    # its text by services/audit_classifier.py. Nullable so older rows and the
+    # self-healing column check in main.py both cope.
+    audit_type: Mapped[str | None] = mapped_column(String(32), index=True)
+    audit_type_confidence: Mapped[float | None] = mapped_column(Float)
     assignee: Mapped[str | None] = mapped_column(String(160))
     resolution_note: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

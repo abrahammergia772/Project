@@ -401,6 +401,8 @@ class ComplaintOut(ORMModel):
     sentiment: str | None = None
     ai_summary: str | None = None
     confidence: int = 0
+    audit_type: str | None = None
+    audit_type_confidence: float | None = None
     assignee: str | None = None
     resolution_note: str = ""
     created_at: datetime | None = None
@@ -451,6 +453,27 @@ class AuditLogOut(ORMModel):
     context: str | None = None
     explanation: str | None = None
     review_status: str
+
+
+class ClassifyTextRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=2000)
+
+
+class ClassifyAlternative(BaseModel):
+    audit_type: str
+    confidence: float
+
+
+class ClassifyTextResponse(BaseModel):
+    audit_type: str
+    label: str
+    confidence: float
+    # False when the text is too ambiguous to file automatically. The training
+    # data contains deliberately undecidable notes, so this is a normal
+    # outcome, not an error.
+    is_confident: bool
+    source: str                       # "model" | "heuristic" | "empty"
+    alternatives: list[ClassifyAlternative] = []
 
 
 class AuditFeedbackRequest(BaseModel):

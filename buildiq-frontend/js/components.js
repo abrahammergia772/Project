@@ -192,6 +192,25 @@ const Components = (() => {
   }
 
   // ---------------- Complaint card ----------------
+  // The audit type is predicted from the complaint's wording, so it can be
+  // wrong. When the classifier was unsure the badge says so rather than
+  // presenting a guess as fact -- some notes are genuinely undecidable.
+  function auditTypeBadge(c) {
+    if (!c.audit_type) return "";
+    const meta = (window.ReferenceData && ReferenceData.auditTypeMeta)
+      ? ReferenceData.auditTypeMeta(c.audit_type) : null;
+    const label = meta ? meta.label : c.audit_type;
+    const conf = typeof c.audit_type_confidence === "number" ? c.audit_type_confidence : null;
+    const unsure = conf !== null && conf < 0.55;
+    const pct = conf !== null ? ` ${Math.round(conf * 100)}%` : "";
+    const title = unsure
+      ? `Predicted from the text, but the wording is ambiguous (${pct.trim()} confidence) — worth a human check`
+      : `Predicted from the text${pct ? " (" + pct.trim() + " confidence)" : ""}`;
+    return `<span class="badge badge-${unsure ? "gray" : (meta ? meta.color : "blue")}" title="${escapeHtml(title)}">
+      <i class="fa-solid ${unsure ? "fa-circle-question" : (meta ? meta.icon : "fa-shield-halved")}"></i>
+      ${escapeHtml(label)}${unsure ? " ?" : ""}</span>`;
+  }
+
   function createComplaintCard(c) {
     const sevType = severityColor(c.severity);
     const sentimentIcon = c.sentiment === "Angry" ? "fa-face-angry" : c.sentiment === "Frustrated" ? "fa-face-frown" : "fa-face-meh";
@@ -209,6 +228,7 @@ const Components = (() => {
           ${createBadge(c.category, "blue")}
           ${createBadge(c.department, "gray")}
           ${createBadge(c.severity, sevType)}
+          ${auditTypeBadge(c)}
         </div>
         <p style="font-size:13.5px; color:var(--text-secondary); margin-bottom:12px; display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden;">${escapeHtml(c.text)}</p>
         <div class="card" style="background:var(--bg-input); border-left:3px solid var(--accent); padding:12px 14px; margin-bottom:12px;">
@@ -552,6 +572,7 @@ const Components = (() => {
     createToast, createAvatar, createBadge, createProgressBar, createStatCard,
     createTypedInput, resolveTypedValue, Combo,
     createMemberCard, createProjectCard, createComplaintCard, createAuditCard,
+    auditTypeBadge,
     createSkeleton, skeletonGrid, createEmptyState, createModal, createConfirmDialog, createDrawer,
   };
 })();

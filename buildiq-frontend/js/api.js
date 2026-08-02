@@ -865,6 +865,16 @@ const API = (() => {
     getAuditTypes: () => BUILDIQ_CONFIG.MOCK_MODE
       ? Promise.resolve(ReferenceData.AUDIT_TYPE_LIST)
       : request("/audit/types"),
+    // Sort a free-text note into one of the seven audit types. Backed by the
+    // trained classifier in train_model/, with a keyword fallback server-side.
+    classifyAuditText: (text) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ audit_type: "USER_ACTIVITY", label: "User Activity Audit",
+                          confidence: 0, is_confident: false,
+                          source: "mock", alternatives: [] })
+      : request("/audit/classify", { method: "POST", body: { text } }),
+    getClassifierStatus: () => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ model_loaded: false, fallback: "keyword heuristic" })
+      : request("/audit/classifier-status"),
     createProject: (payload) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.createProject(payload) : request("/projects", { method: "POST", body: payload }),
     createDepartment: (payload) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.createDepartment(payload)

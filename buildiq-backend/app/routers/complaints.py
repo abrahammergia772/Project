@@ -22,7 +22,7 @@ from ..schemas import (
     OkResponse, SuggestSolutionOut, SuggestSolutionRequest,
 )
 from ..security import AUDITOR, ORG_WIDE, PROJECT_MANAGER, can_resolve_complaint, get_current_user
-from ..services import groq_service
+from ..services import audit_classifier, groq_service
 
 router = APIRouter(prefix="/complaints", tags=["complaints"])
 
@@ -64,6 +64,12 @@ def create_complaint(payload: ComplaintCreate, user: User = Depends(get_current_
         payload.text, ai_engine.COMPLAINT_CATEGORIES, ai_engine.DEPARTMENT_ROUTING
     ) or ai_engine.classify_complaint(payload.text)
 
+    # Sort the complaint into one of the seven audit types from its wording.
+    # Independent of the triage above: that picks a department to act on it,
+    # this records what KIND of audit concern it is, so the audit dashboard
+    # can count complaints alongside structured events.
+    classified = audit_classifier.classify(payload.text)
+
     project = db.get(Project, payload.project_id) if payload.project_id else None
     severity = payload.severity or triage["severity"]
 
@@ -80,6 +86,10 @@ def create_complaint(payload: ComplaintCreate, user: User = Depends(get_current_
         project=project.title if project else None,
         text=payload.text, sentiment=triage["sentiment"],
         ai_summary=triage["ai_summary"], confidence=triage["confidence"],
+        # Stored even when unconfident -- the confidence travels with it so
+        # the UI can mark it "needs review" rather than pretending certainty.
+        audit_type=classified["audit_type"],
+        audit_type_confidence=classified["confidence"],
         assignee=assignee.full_name if assignee else "Unassigned",
         resolution_note="", created_at=utcnow(),
     )
