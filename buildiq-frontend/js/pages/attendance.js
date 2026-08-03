@@ -37,6 +37,15 @@ const AttendancePage = (() => {
     const tabs = [];
     if (canTake) tabs.push({ key: "take", label: "Record Attendance" });
     tabs.push({ key: "mine", label: "My Attendance" });
+    // Shift Management and Import are register-writing tools, so they follow
+    // the same rule as taking attendance: Workforce & Attendance only.
+    if (canTake) {
+      tabs.push({ key: "shifts", label: "Shift Management" });
+      tabs.push({ key: "import", label: "Import from Excel" });
+    }
+    // Overtime is visible to anyone with oversight (managers approve it) and
+    // to the workforce team (they log it). Everyone else sees their own.
+    tabs.push({ key: "overtime", label: "Overtime" });
     if (canSeeReasons) tabs.push({ key: "reasons", label: "Absence Reasons" });
     if (canOversee) {
       tabs.push({ key: "ranking", label: "AI Absence Ranking" });
@@ -143,6 +152,9 @@ const AttendancePage = (() => {
       renderTakeAttendance(el);
     }
     else if (tab === "mine") renderMyAttendance(el);
+    else if (tab === "shifts") renderShifts(el);
+    else if (tab === "import") renderImport(el);
+    else if (tab === "overtime") renderOvertime(el);
     else if (tab === "reasons") renderReasonsQueue(el);
     else if (tab === "ranking") renderRanking(el);
     else if (tab === "history") renderHistory(el);
@@ -693,6 +705,495 @@ const AttendancePage = (() => {
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = original; }
     }
+  }
+
+  // ---------------- Shift Management ----------------
+  const DAY_NAMES = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+
+  async function renderShifts(el) {
+    el.innerHTML = Components.skeletonGrid(3, "row");
+    let shifts = [];
+    try { shifts = await API.getShifts(true); }
+    catch (err) {
+      el.innerHTML = Components.createEmptyState("fa-triangle-exclamation",
+        "Could not load shifts", err.message);
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="attendance-toolbar">
+        <p style="font-size:12.5px;color:var(--text-muted);max-width:520px;margin:0;">
+          Named working patterns. Hours shown are paid hours, after the unpaid break.
+          A shift ending before it starts runs overnight.
+        </p>
+        <button class="btn btn-primary" id="newShiftBtn" style="margin-left:auto;">
+          <i class="fa-solid fa-plus"></i> New Shift
+        </button>
+      </div>
+      <div class="shift-grid">
+        ${shifts.map(shiftCardHtml).join("") || Components.createEmptyState(
+          "fa-clock", "No shifts yet", "Create one to get started.")}
+      </div>`;
+
+    document.getElementById("newShiftBtn").addEventListener("click", () => openShiftModal(null, el));
+    Utils.qsa(".shift-edit", el).forEach(b => b.addEventListener("click", () =>
+      openShiftModal(shifts.find(s => s.id === b.dataset.id), el)));
+    Utils.qsa(".shift-assign", el).forEach(b => b.addEventListener("click", () =>
+      openAssignModal(shifts.find(s => s.id === b.dataset.id), el)));
+    Utils.qsa(".shift-delete", el).forEach(b => b.addEventListener("click", () =>
+      removeShift(shifts.find(s => s.id === b.dataset.id), el)));
+  }
+
+  function shiftCardHtml(s) {
+    return `
+      <div class="shift-card${s.active ? "" : " inactive"}">
+        <div class="shift-card-head">
+          <span class="shift-dot" style="background:${Utils.escapeHtml(s.color || "var(--accent)")};"></span>
+          <b>${Utils.escapeHtml(s.name)}</b>
+          ${s.is_default ? Components.createBadge("Default", "green") : ""}
+          ${s.active ? "" : Components.createBadge("Inactive", "gray")}
+        </div>
+        <div class="shift-times">${Utils.escapeHtml(s.start_time)} – ${Utils.escapeHtml(s.end_time)}
+          <span class="shift-hours">${s.hours}h paid</span></div>
+        <div class="shift-meta">${s.break_minutes} min break · ${s.assigned_count} assigned</div>
+        <div class="shift-days">
+          ${DAY_NAMES.map((d, i) => `<span class="${(s.work_days || []).includes(i) ? "on" : ""}">${d}</span>`).join("")}
+        </div>
+        <div class="shift-actions">
+          <button class="btn btn-secondary btn-sm shift-assign" data-id="${s.id}"><i class="fa-solid fa-user-plus"></i> Assign</button>
+          <button class="btn btn-secondary btn-sm shift-edit" data-id="${s.id}"><i class="fa-solid fa-pen"></i> Edit</button>
+          <button class="btn btn-outline btn-sm shift-delete" data-id="${s.id}"><i class="fa-solid fa-trash"></i></button>
+        </div>
+      </div>`;
+  }
+
+  function openShiftModal(shift, el) {
+    const editing = !!shift;
+    const days = shift?.work_days || [0, 1, 2, 3, 4, 5];
+    const modal = Components.createModal({
+      title: editing ? `Edit ${shift.name}` : "New shift",
+      bodyHtml: `
+        <div class="field"><label for="shName">Name</label>
+          <input class="input" id="shName" value="${Utils.escapeHtml(shift?.name || "")}" placeholder="e.g. Night Shift"></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="field"><label for="shStart">Starts</label>
+            <input class="input" id="shStart" type="time" value="${shift?.start_time || "08:00"}"></div>
+          <div class="field"><label for="shEnd">Ends</label>
+            <input class="input" id="shEnd" type="time" value="${shift?.end_time || "17:00"}"></div>
+        </div>
+        <div class="field"><label for="shBreak">Unpaid break (minutes)</label>
+          <input class="input" id="shBreak" type="number" min="0" max="480" value="${shift?.break_minutes ?? 60}"></div>
+        <div class="field"><label>Working days</label>
+          <div class="day-picker" id="shDays">
+            ${DAY_NAMES.map((d, i) => `<button type="button" class="day-chip${days.includes(i) ? " on" : ""}" data-day="${i}">${d}</button>`).join("")}
+          </div></div>
+        <div class="field"><label for="shColor">Colour</label>
+          <input class="input" id="shColor" type="color" value="${shift?.color || "#2563EB"}" style="height:40px;"></div>
+        <label class="flex items-center gap-8" style="font-size:13px;">
+          <input type="checkbox" id="shDefault" ${shift?.is_default ? "checked" : ""}>
+          Make this the default for new people
+        </label>
+        <div id="shPreview" class="shift-preview"></div>`,
+      actionsHtml: `
+        <button class="btn btn-secondary" id="shCancel">Cancel</button>
+        <button class="btn btn-primary" id="shSave">${editing ? "Save" : "Create"}</button>`,
+    });
+
+    const q = (id) => modal.el.querySelector(id);
+    // Live preview, so the overnight case is obvious before saving rather
+    // than a surprise afterwards.
+    function preview() {
+      const h = localShiftHours(q("#shStart").value, q("#shEnd").value, +q("#shBreak").value || 0);
+      const overnight = toMinutes(q("#shEnd").value) <= toMinutes(q("#shStart").value);
+      q("#shPreview").innerHTML = `<i class="fa-solid fa-clock"></i> ${h}h paid`
+        + (overnight ? ` <span class="overnight">runs overnight</span>` : "");
+    }
+    ["#shStart", "#shEnd", "#shBreak"].forEach(id => q(id).addEventListener("input", preview));
+    preview();
+
+    Utils.qsa(".day-chip", modal.el).forEach(chip =>
+      chip.addEventListener("click", () => chip.classList.toggle("on")));
+
+    q("#shCancel").addEventListener("click", modal.close);
+    q("#shSave").addEventListener("click", async (e) => {
+      const payload = {
+        name: q("#shName").value.trim(),
+        start_time: q("#shStart").value,
+        end_time: q("#shEnd").value,
+        break_minutes: +q("#shBreak").value || 0,
+        work_days: Utils.qsa(".day-chip.on", modal.el).map(c => +c.dataset.day),
+        color: q("#shColor").value,
+        is_default: q("#shDefault").checked,
+      };
+      if (!payload.name) { Components.createToast("Give the shift a name.", "error"); return; }
+      if (!payload.work_days.length) { Components.createToast("Pick at least one working day.", "error"); return; }
+
+      e.target.disabled = true;
+      try {
+        if (editing) await API.updateShift(shift.id, payload);
+        else await API.createShift(payload);
+        modal.close();
+        Components.createToast(editing ? "Shift updated." : "Shift created.", "success");
+        renderShifts(el);
+      } catch (err) {
+        e.target.disabled = false;
+        Components.createToast(err.message, "error");
+      }
+    });
+  }
+
+  const toMinutes = (hhmm) => {
+    const [h, m] = String(hhmm || "0:0").split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+
+  /** Mirrors shift_hours() in app/routers/shifts.py. An end at or before the
+   *  start means the shift crosses midnight. */
+  function localShiftHours(start, end, breakMinutes) {
+    let span = toMinutes(end) - toMinutes(start);
+    if (span <= 0) span += 24 * 60;
+    return Math.round(Math.max(0, span - Math.max(0, breakMinutes)) / 60 * 100) / 100;
+  }
+
+  async function openAssignModal(shift, el) {
+    const people = roster?.people || (await API.getAttendanceRoster(gridMonth)).people;
+    const modal = Components.createModal({
+      title: `Assign to ${shift.name}`,
+      bodyHtml: `
+        <input class="input" id="asSearch" type="search" placeholder="Search name, ID or department...">
+        <div class="assign-list" id="asList">
+          ${people.map(p => `
+            <label class="assign-row" data-search="${Utils.escapeHtml(`${p.name} ${p.employee_id || ""} ${p.department || ""}`.toLowerCase())}">
+              <input type="checkbox" value="${Utils.escapeHtml(p.id)}" ${p.shift === shift.name ? "checked" : ""}>
+              <span><b>${Utils.escapeHtml(p.name)}</b>
+                <small>${Utils.escapeHtml(p.employee_id || "—")} · ${Utils.escapeHtml(p.department || "—")}</small></span>
+              <em>${Utils.escapeHtml(p.shift || "—")}</em>
+            </label>`).join("")}
+        </div>`,
+      actionsHtml: `
+        <button class="btn btn-secondary" id="asCancel">Cancel</button>
+        <button class="btn btn-primary" id="asSave">Assign selected</button>`,
+    });
+
+    const search = modal.el.querySelector("#asSearch");
+    search.addEventListener("input", () => {
+      const query = search.value.trim().toLowerCase();
+      Utils.qsa(".assign-row", modal.el).forEach(row => {
+        row.style.display = !query || row.dataset.search.includes(query) ? "" : "none";
+      });
+    });
+
+    modal.el.querySelector("#asCancel").addEventListener("click", modal.close);
+    modal.el.querySelector("#asSave").addEventListener("click", async (e) => {
+      const ids = Utils.qsa("#asList input:checked", modal.el).map(i => i.value);
+      if (!ids.length) { Components.createToast("Nobody selected.", "info"); return; }
+      e.target.disabled = true;
+      try {
+        await API.assignShift(ids, shift.name);
+        modal.close();
+        Components.createToast(`${ids.length} assigned to ${shift.name}.`, "success");
+        roster = null;                 // the grid's shift column is now stale
+        renderShifts(el);
+      } catch (err) {
+        e.target.disabled = false;
+        Components.createToast(err.message, "error");
+      }
+    });
+  }
+
+  async function removeShift(shift, el) {
+    // Signature is (message, onConfirm, options) -- positional, not an
+    // options object.
+    Components.createConfirmDialog(
+      shift.assigned_count
+        ? `${shift.assigned_count} people are on this shift, so it will be deactivated rather than deleted.`
+        : "This shift is not in use and will be removed.",
+      async () => {
+        try {
+          const res = await API.deleteShift(shift.id);
+          Components.createToast(res.message || "Shift removed.", "success");
+          renderShifts(el);
+        } catch (err) { Components.createToast(err.message, "error"); }
+      },
+      { title: `Delete ${shift.name}?`, confirmText: "Delete" });
+  }
+
+  // ---------------- Import from Excel ----------------
+  let importFile = null;
+
+  function renderImport(el) {
+    el.innerHTML = `
+      <div class="import-panel">
+        <div class="import-drop" id="importDrop">
+          <i class="fa-solid fa-file-arrow-up"></i>
+          <b>Drop a spreadsheet here, or click to choose</b>
+          <span>.xlsx or .csv · needs Employee ID, Date and Status columns</span>
+          <input type="file" id="importFile" accept=".xlsx,.xlsm,.csv,.txt" class="hidden">
+        </div>
+        <div class="import-help">
+          <p><b>Headings are matched loosely</b> — “Employee ID”, “EMP ID” and “Name” all work,
+             as do “Date”/“Day” and “Status”/“Attendance”.</p>
+          <p><b>Status</b> accepts P, Present, Yes, 1 — or A, Absent, No, 0.</p>
+          <p><b>Dates</b> accept 2026-08-01 and 01/08/2026.</p>
+          <a href="#" id="templateLink"><i class="fa-solid fa-download"></i> Download a template</a>
+        </div>
+        <div id="importResult"></div>
+      </div>`;
+
+    const input = document.getElementById("importFile");
+    const drop = document.getElementById("importDrop");
+    drop.addEventListener("click", () => input.click());
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.classList.add("over"); });
+    drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.classList.remove("over");
+      if (e.dataTransfer.files?.[0]) handleImportFile(e.dataTransfer.files[0]);
+    });
+    input.addEventListener("change", () => {
+      if (input.files?.[0]) handleImportFile(input.files[0]);
+    });
+
+    document.getElementById("templateLink").addEventListener("click", async (e) => {
+      e.preventDefault();
+      try {
+        const res = await fetch(API.importTemplateUrl(), {
+          headers: { Authorization: `Bearer ${Auth.getToken()}` },
+        });
+        if (!res.ok) throw new Error(`Download failed (${res.status})`);
+        const url = URL.createObjectURL(await res.blob());
+        const a = document.createElement("a");
+        a.href = url; a.download = "attendance-template.csv";
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      } catch (err) { Components.createToast(err.message, "error"); }
+    });
+  }
+
+  async function handleImportFile(file) {
+    importFile = file;
+    const out = document.getElementById("importResult");
+    out.innerHTML = `<div class="import-status"><i class="fa-solid fa-spinner fa-spin"></i> Checking ${Utils.escapeHtml(file.name)}...</div>`;
+
+    let preview;
+    try { preview = await API.previewAttendanceImport(file); }
+    catch (err) {
+      out.innerHTML = `<div class="attendance-notice warn"><i class="fa-solid fa-circle-xmark"></i>
+        <span>${Utils.escapeHtml(err.message)}</span></div>`;
+      return;
+    }
+
+    const bad = preview.rows.filter(r => !r.ok);
+    out.innerHTML = `
+      <div class="import-summary">
+        <div><b>${preview.total_rows}</b><span>rows read</span></div>
+        <div class="ok"><b>${preview.valid}</b><span>valid</span></div>
+        <div class="${preview.invalid ? "bad" : ""}"><b>${preview.invalid}</b><span>skipped</span></div>
+        <div><b>${preview.would_create}</b><span>new</span></div>
+        <div><b>${preview.would_update}</b><span>updated</span></div>
+      </div>
+      ${bad.length ? `
+        <div class="import-errors">
+          <b>Rows that will be skipped</b>
+          <ul>${bad.slice(0, 25).map(r => `<li>Row ${r.row}${r.person ? ` (${Utils.escapeHtml(r.person)})` : ""} — ${Utils.escapeHtml(r.error)}</li>`).join("")}</ul>
+          ${bad.length > 25 ? `<small>...and ${bad.length - 25} more</small>` : ""}
+        </div>` : ""}
+      <div class="flex gap-8" style="margin-top:14px;">
+        <button class="btn btn-primary" id="importConfirm" ${preview.valid ? "" : "disabled"}>
+          <i class="fa-solid fa-check"></i> Import ${preview.valid} row${preview.valid === 1 ? "" : "s"}
+        </button>
+        <button class="btn btn-secondary" id="importCancel">Cancel</button>
+      </div>`;
+
+    document.getElementById("importCancel").addEventListener("click", () => {
+      importFile = null;
+      renderImport(document.getElementById("attTabContent"));
+    });
+    document.getElementById("importConfirm").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      e.target.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Importing...`;
+      try {
+        const res = await API.commitAttendanceImport(importFile, true);
+        Components.createToast(
+          `Imported ${res.imported} row${res.imported === 1 ? "" : "s"}`
+          + (res.skipped ? `, skipped ${res.skipped}.` : "."), "success");
+        AppEvents.logAudit(user, "EXTERNAL_IMPORT", `attendance/import/${res.imported}`);
+        await DataStore.load(["attendance"], { force: true });
+        scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
+        roster = null;                 // the grid must re-read from the server
+        renderStats();
+        importFile = null;
+        renderImport(document.getElementById("attTabContent"));
+      } catch (err) {
+        e.target.disabled = false;
+        e.target.innerHTML = `<i class="fa-solid fa-check"></i> Retry import`;
+        Components.createToast(err.message, "error");
+      }
+    });
+  }
+
+  // ---------------- Overtime ----------------
+  let otMonth = new Date().toISOString().slice(0, 7);
+
+  async function renderOvertime(el) {
+    el.innerHTML = Components.skeletonGrid(4, "row");
+    const canLog = Roles.canTakeAttendance(user);
+    const canReview = Roles.ORG_WIDE.includes(user.role) || user.role === "Department Manager";
+
+    let rows = [], summary = null;
+    try {
+      rows = await API.getOvertime({ month: otMonth });
+      if (Roles.canViewAttendance(user)) summary = await API.getOvertimeSummary(otMonth);
+    } catch (err) {
+      el.innerHTML = Components.createEmptyState("fa-triangle-exclamation",
+        "Could not load overtime", err.message);
+      return;
+    }
+
+    el.innerHTML = `
+      <div class="attendance-toolbar">
+        <div class="month-nav">
+          <button class="icon-btn" id="otPrev" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
+          <b>${Utils.escapeHtml(monthLabel(otMonth))}</b>
+          <button class="icon-btn" id="otNext" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        ${canLog ? `<button class="btn btn-primary" id="otAdd" style="margin-left:auto;">
+          <i class="fa-solid fa-plus"></i> Log Overtime</button>` : ""}
+      </div>
+      ${summary ? `
+        <div class="ot-summary">
+          <div><b>${summary.total_hours}</b><span>approved hours</span></div>
+          <div><b>${summary.equivalent_hours}</b><span>paid equivalent</span></div>
+          <div class="warn"><b>${summary.pending}</b><span>awaiting approval</span></div>
+          <div><b>${summary.approved}</b><span>approved</span></div>
+          <div><b>${summary.rejected}</b><span>rejected</span></div>
+        </div>` : ""}
+      ${rows.length ? `
+        <div class="ot-list">
+          ${rows.map(o => overtimeRowHtml(o, canReview, canLog)).join("")}
+        </div>` : Components.createEmptyState("fa-clock", "No overtime this month",
+            canLog ? "Log the first entry with the button above." : "")}`;
+
+    document.getElementById("otPrev").addEventListener("click", () => {
+      otMonth = shiftMonth(otMonth, -1); renderOvertime(el);
+    });
+    document.getElementById("otNext").addEventListener("click", () => {
+      otMonth = shiftMonth(otMonth, 1); renderOvertime(el);
+    });
+    document.getElementById("otAdd")?.addEventListener("click", () => openOvertimeModal(el));
+
+    Utils.qsa(".ot-approve", el).forEach(b => b.addEventListener("click", () =>
+      reviewOvertime(b.dataset.id, "Approved", el)));
+    Utils.qsa(".ot-reject", el).forEach(b => b.addEventListener("click", () =>
+      reviewOvertime(b.dataset.id, "Rejected", el)));
+    Utils.qsa(".ot-delete", el).forEach(b => b.addEventListener("click", async () => {
+      try {
+        await API.deleteOvertime(b.dataset.id);
+        Components.createToast("Entry removed.", "success");
+        renderOvertime(el);
+      } catch (err) { Components.createToast(err.message, "error"); }
+    }));
+  }
+
+  function overtimeRowHtml(o, canReview, canLog) {
+    const tone = { Approved: "green", Rejected: "red", Pending: "yellow" }[o.status] || "gray";
+    return `
+      <div class="ot-row">
+        <div class="ot-main">
+          <div class="ot-who"><b>${Utils.escapeHtml(o.person_name || o.person_id)}</b>
+            ${Components.createBadge(o.status, tone)}</div>
+          <div class="ot-meta">${Utils.escapeHtml(o.date)} · ${o.hours}h × ${o.rate_multiplier}
+            = <b>${o.equivalent_hours}h</b> paid${o.department ? ` · ${Utils.escapeHtml(o.department)}` : ""}</div>
+          ${o.reason ? `<div class="ot-reason">${Utils.escapeHtml(o.reason)}</div>` : ""}
+          ${o.reviewed_by ? `<div class="ot-review"><i class="fa-solid fa-gavel"></i>
+            ${Utils.escapeHtml(o.status)} by ${Utils.escapeHtml(o.reviewed_by)}${o.review_note ? ` — ${Utils.escapeHtml(o.review_note)}` : ""}</div>` : ""}
+        </div>
+        <div class="ot-actions">
+          ${canReview && o.status === "Pending" ? `
+            <button class="btn btn-primary btn-sm ot-approve" data-id="${o.id}"><i class="fa-solid fa-check"></i> Approve</button>
+            <button class="btn btn-secondary btn-sm ot-reject" data-id="${o.id}"><i class="fa-solid fa-xmark"></i> Reject</button>` : ""}
+          ${canLog && o.status !== "Approved" ? `
+            <button class="btn btn-outline btn-sm ot-delete" data-id="${o.id}" aria-label="Delete"><i class="fa-solid fa-trash"></i></button>` : ""}
+        </div>
+      </div>`;
+  }
+
+  async function reviewOvertime(id, decision, el) {
+    const modal = Components.createModal({
+      title: `${decision === "Approved" ? "Approve" : "Reject"} overtime`,
+      bodyHtml: `<div class="field"><label for="otNote">Note (optional)</label>
+        <textarea class="input" id="otNote" rows="3" placeholder="Why?"></textarea></div>`,
+      actionsHtml: `<button class="btn btn-secondary" id="otRvCancel">Cancel</button>
+        <button class="btn btn-primary" id="otRvOk">${decision}</button>`,
+    });
+    modal.el.querySelector("#otRvCancel").addEventListener("click", modal.close);
+    modal.el.querySelector("#otRvOk").addEventListener("click", async (e) => {
+      e.target.disabled = true;
+      try {
+        await API.reviewOvertime(id, decision, modal.el.querySelector("#otNote").value.trim() || null);
+        modal.close();
+        Components.createToast(`Overtime ${decision.toLowerCase()}.`, "success");
+        renderOvertime(el);
+      } catch (err) {
+        e.target.disabled = false;
+        Components.createToast(err.message, "error");
+      }
+    });
+  }
+
+  async function openOvertimeModal(el) {
+    const people = roster?.people || (await API.getAttendanceRoster(gridMonth)).people;
+    const today = new Date().toISOString().slice(0, 10);
+    const modal = Components.createModal({
+      title: "Log overtime",
+      bodyHtml: `
+        <div class="field"><label for="otPerson">Person</label>
+          <input class="input" id="otPerson" list="otPeople" placeholder="Search by name or ID...">
+          <datalist id="otPeople">
+            ${people.map(p => `<option value="${Utils.escapeHtml(p.name)}">${Utils.escapeHtml(p.employee_id || "")} · ${Utils.escapeHtml(p.department || "")}</option>`).join("")}
+          </datalist></div>
+        <div class="grid" style="grid-template-columns:1fr 1fr;gap:12px;">
+          <div class="field"><label for="otDate">Date</label>
+            <input class="input" id="otDate" type="date" value="${today}" max="${today}"></div>
+          <div class="field"><label for="otHours">Hours</label>
+            <input class="input" id="otHours" type="number" step="0.5" min="0.5" max="16" value="2"></div>
+        </div>
+        <div class="field"><label for="otRate">Rate</label>
+          <select class="input" id="otRate">
+            <option value="1.5">1.5× — time and a half</option>
+            <option value="2">2× — double time</option>
+            <option value="1">1× — flat rate</option>
+          </select></div>
+        <div class="field"><label for="otReason">Reason</label>
+          <textarea class="input" id="otReason" rows="3" placeholder="Why were the extra hours needed?"></textarea></div>`,
+      actionsHtml: `<button class="btn btn-secondary" id="otCancel">Cancel</button>
+        <button class="btn btn-primary" id="otSave">Log it</button>`,
+    });
+
+    modal.el.querySelector("#otCancel").addEventListener("click", modal.close);
+    modal.el.querySelector("#otSave").addEventListener("click", async (e) => {
+      const typed = modal.el.querySelector("#otPerson").value.trim().toLowerCase();
+      const person = people.find(p => (p.name || "").toLowerCase() === typed);
+      if (!person) { Components.createToast("Pick someone from the list.", "error"); return; }
+
+      e.target.disabled = true;
+      try {
+        await API.logOvertime({
+          person_id: person.id,
+          person_type: person.person_type,
+          date: modal.el.querySelector("#otDate").value,
+          hours: +modal.el.querySelector("#otHours").value,
+          rate_multiplier: +modal.el.querySelector("#otRate").value,
+          reason: modal.el.querySelector("#otReason").value.trim() || null,
+        });
+        modal.close();
+        Components.createToast("Overtime logged — awaiting approval.", "success");
+        renderOvertime(el);
+      } catch (err) {
+        e.target.disabled = false;
+        Components.createToast(err.message, "error");
+      }
+    });
   }
 
   // ---------------- AI Absence Ranking ----------------

@@ -11,6 +11,27 @@ const API = (() => {
   // can be changed at runtime (tests, environment switching) and take effect.
   const base = () => BUILDIQ_CONFIG.API_BASE;
 
+
+  /** Multipart upload helper. Kept separate from request() because the
+   *  browser must set its own multipart boundary; sending our JSON
+   *  Content-Type header breaks the parse server-side. */
+  async function _upload(path, file) {
+    if (BUILDIQ_CONFIG.MOCK_MODE) {
+      return { total_rows: 0, valid: 0, invalid: 0, would_create: 0,
+               would_update: 0, rows: [], columns: [], imported: 0, skipped: 0, errors: [] };
+    }
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch(`${base()}${path}`, {
+      method: "POST",
+      headers: Auth.getToken() ? { Authorization: `Bearer ${Auth.getToken()}` } : {},
+      body: fd,
+    });
+    const body = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(body.detail || `Upload failed (${res.status})`);
+    return body;
+  }
+
   async function request(path, { method = "GET", body, params, auth = true } = {}) {
     let url = `${base()}${path}`;
     if (params) {
@@ -898,6 +919,49 @@ const API = (() => {
     analyzeProject: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.analyzeProject(id) : request(`/projects/${id}/analyze`, { method: "POST" }),
 
     // Attendance (Workforce & Attendance dept takes it; everyone explains their own absences)
+    // ---- Shifts ----
+    getShifts: (includeInactive = false) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve([{ id: "shift_1", name: "Regular Shift", start_time: "08:00",
+                           end_time: "17:00", break_minutes: 60, work_days: [0,1,2,3,4,5],
+                           hours: 8, is_default: true, active: true, assigned_count: 0 }])
+      : request("/shifts", { params: includeInactive ? { include_inactive: true } : {} }),
+    createShift: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id: "shift_mock", ...payload })
+      : request("/shifts", { method: "POST", body: payload }),
+    updateShift: (id, payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id, ...payload })
+      : request(`/shifts/${id}`, { method: "PUT", body: payload }),
+    deleteShift: (id) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ ok: true }) : request(`/shifts/${id}`, { method: "DELETE" }),
+    assignShift: (personIds, shiftName) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ ok: true })
+      : request("/shifts/assign", { method: "POST",
+                                    body: { person_ids: personIds, shift_name: shiftName } }),
+
+    // ---- Overtime ----
+    getOvertime: (params = {}) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve([]) : request("/overtime", { params }),
+    logOvertime: (payload) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id: "ot_mock", ...payload, status: "Pending" })
+      : request("/overtime", { method: "POST", body: payload }),
+    reviewOvertime: (id, status, note) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ id, status })
+      : request(`/overtime/${id}/review`, { method: "PUT", body: { status, note } }),
+    deleteOvertime: (id) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ ok: true }) : request(`/overtime/${id}`, { method: "DELETE" }),
+    getOvertimeSummary: (month) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({ month, total_hours: 0, equivalent_hours: 0,
+                          pending: 0, approved: 0, rejected: 0, by_person: [] })
+      : request("/overtime/summary", { params: { month } }),
+
+    // ---- Attendance import ----
+    // Multipart, so these bypass request() -- the browser must set the
+    // boundary itself and would be overridden by our JSON Content-Type.
+    previewAttendanceImport: (file) => _upload("/attendance/import/preview", file),
+    commitAttendanceImport: (file, skipInvalid = true) =>
+      _upload(`/attendance/import?skip_invalid=${skipInvalid}`, file),
+    importTemplateUrl: () => `${base()}/attendance/import/template`,
+
     // Roster + a whole month of marks in one call. The grid is N people x 31
     // days; fetching per cell would be hundreds of requests.
     getAttendanceRoster: (month) => BUILDIQ_CONFIG.MOCK_MODE

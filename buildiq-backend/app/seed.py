@@ -18,7 +18,7 @@ from . import ai_engine
 from .config import settings
 from .models import (
     Attendance, AuditLog, Client, Complaint, DailyWorker, Department, Material,
-    Notification, Project, ProjectMember, Task, User,
+    Notification, Overtime, Project, ProjectMember, Shift, Task, User,
 )
 from .security import hash_password
 
@@ -415,6 +415,51 @@ def seed(db: Session) -> None:
         db.add(AuditLog(
             id=f"log_{i + 1}", user=actor.full_name, user_role=actor.role,
             action=action, resource=rnd.choice(resources[tkey]), timestamp=when, **scored,
+        ))
+
+    # ---- Shifts ----
+    # Three patterns covering how these sites actually run. Regular is the
+    # default, so anyone created without an explicit shift inherits it.
+    # work_days is Monday=0..Sunday=6: a six-day week, Sunday off.
+    shifts = [
+        ("shift_1", "Regular Shift", "08:00", "17:00", 60, [0, 1, 2, 3, 4, 5], "#2563EB", True),
+        ("shift_2", "Early Shift", "06:00", "14:00", 30, [0, 1, 2, 3, 4, 5], "#16A34A", False),
+        ("shift_3", "Night Shift", "22:00", "06:00", 45, [0, 1, 2, 3, 4], "#7C3AED", False),
+    ]
+    for sid, name, start, end, brk, days, color, default in shifts:
+        db.add(Shift(id=sid, name=name, start_time=start, end_time=end,
+                     break_minutes=brk, work_days=days, color=color,
+                     is_default=default, active=True))
+
+    # Put everyone on the default unless they are already assigned, so the
+    # register never shows a blank shift column.
+    for m in members:
+        if m.role != "Client" and not m.shift:
+            m.shift = "Regular Shift"
+    for w in workers:
+        if not w.shift:
+            w.shift = "Regular Shift"
+
+    # ---- Overtime ----
+    # A few entries in each state so the review queue is not empty on a
+    # first run and the approve/reject flow can be seen working.
+    internal_for_ot = [m for m in members if m.role != "Client"][:6]
+    ot_states = [("Approved", "Tsegaye Worku"), ("Pending", None), ("Rejected", "Tsegaye Worku")]
+    for i, person in enumerate(internal_for_ot):
+        state, reviewer = ot_states[i % len(ot_states)]
+        when = _utc(rnd.randint(1, 20)).strftime("%Y-%m-%d")
+        db.add(Overtime(
+            id=f"ot_{i + 1}", person_id=person.id, person_name=person.full_name,
+            person_type="staff", department=person.department, date=when,
+            hours=rnd.choice([1.5, 2, 3, 4]),
+            rate_multiplier=rnd.choice([1.5, 1.5, 2.0]),
+            reason=rnd.choice(["Concrete pour ran late", "Client deadline",
+                               "Equipment repair", "Weekend inspection"]),
+            status=state, requested_by="Girma Assefa",
+            reviewed_by=reviewer,
+            reviewed_at=_utc(rnd.randint(0, 3)) if reviewer else None,
+            review_note="Approved for payroll." if state == "Approved" else (
+                "Not pre-authorised." if state == "Rejected" else None),
         ))
 
     # ---- Notifications ----

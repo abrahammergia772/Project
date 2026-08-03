@@ -46,7 +46,7 @@ declare
         'users', 'clients', 'departments', 'projects', 'project_members',
         'materials', 'tasks', 'daily_workers', 'attendance', 'complaints',
         'audit_logs', 'notifications', 'documents', 'password_reset_tokens',
-        'saved_reports', 'messages'
+        'saved_reports', 'messages', 'shifts', 'overtime'
     ];
 begin
     foreach t in array tables loop
@@ -85,7 +85,7 @@ declare
         'users', 'clients', 'departments', 'projects', 'project_members',
         'materials', 'tasks', 'daily_workers', 'attendance', 'complaints',
         'audit_logs', 'notifications', 'documents', 'password_reset_tokens',
-        'saved_reports', 'messages'
+        'saved_reports', 'messages', 'shifts', 'overtime'
     ];
 begin
     foreach t in array tables loop

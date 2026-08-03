@@ -14,3 +14,8 @@ email-validator==2.3.0
 groq==1.6.0
 supabase==2.31.0
 httpx==0.28.1
+
+# Reading uploaded .xlsx attendance sheets. Small (~250 KB) and pure Python.
+# CSV needs nothing extra; without this, .xlsx uploads return a clear 503
+# telling the user to save as CSV rather than failing obscurely.
+openpyxl==3.1.5

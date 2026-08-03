@@ -229,6 +229,64 @@ class Attendance(Base):
     reason_review_note: Mapped[str | None] = mapped_column(Text)
 
 
+class Shift(Base):
+    """A named working pattern (Regular Shift, Night Shift, ...).
+
+    Times are "HH:MM" strings to match Attendance.check_in, which is already
+    stored that way. A shift whose end time is <= its start time is treated as
+    crossing midnight -- a night shift is 22:00-06:00, not an eight-hour
+    negative.
+    """
+    __tablename__ = "shifts"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    start_time: Mapped[str] = mapped_column(String(5), default="08:00")
+    end_time: Mapped[str] = mapped_column(String(5), default="17:00")
+    break_minutes: Mapped[int] = mapped_column(Integer, default=60)
+    # Weekday numbers, Monday=0 .. Sunday=6. Defaults to a six-day week,
+    # which is the norm on these sites -- Saturday is a working day.
+    work_days: Mapped[list] = mapped_column(JSON, default=lambda: [0, 1, 2, 3, 4, 5])
+    color: Mapped[str | None] = mapped_column(String(16))
+    # Exactly one shift is the default; new people inherit it.
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class Overtime(Base):
+    """Extra hours worked beyond a person's shift, and their approval state.
+
+    Deliberately separate from `attendance`: attendance answers "were they
+    here", overtime answers "how much extra, at what rate, approved by whom".
+    Folding overtime into the attendance row would mean a person could not
+    have two overtime entries on one day, and the unique (person_id, date)
+    constraint there would silently prevent it.
+    """
+    __tablename__ = "overtime"
+    __table_args__ = (
+        Index("ix_overtime_person_date", "person_id", "date"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    person_id: Mapped[str] = mapped_column(String(64), index=True, nullable=False)
+    person_name: Mapped[str | None] = mapped_column(String(160))
+    person_type: Mapped[str] = mapped_column(String(24), default="staff")
+    department: Mapped[str | None] = mapped_column(String(96), index=True)
+    date: Mapped[str] = mapped_column(String(10), index=True)      # YYYY-MM-DD
+    hours: Mapped[float] = mapped_column(Float, default=0)
+    # 1.5 = time-and-a-half, 2.0 = double time. Stored per record because the
+    # multiplier depends on when the hours fell (weeknight vs public holiday).
+    rate_multiplier: Mapped[float] = mapped_column(Float, default=1.5)
+    reason: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(24), default="Pending", index=True)
+    requested_by: Mapped[str | None] = mapped_column(String(160))
+    reviewed_by: Mapped[str | None] = mapped_column(String(160))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Complaint(Base):
     __tablename__ = "complaints"
 

@@ -390,6 +390,117 @@ class DailyWorkerOut(ORMModel):
     joined: datetime | None = None
 
 
+# ---------------- Shifts ----------------
+_HHMM = r"^([01]\d|2[0-3]):[0-5]\d$"
+
+
+class ShiftOut(ORMModel):
+    id: str
+    name: str
+    start_time: str
+    end_time: str
+    break_minutes: int = 60
+    work_days: list[int] = []
+    color: str | None = None
+    is_default: bool = False
+    active: bool = True
+    # Computed, not stored: paid hours after the unpaid break, handling a
+    # shift that crosses midnight.
+    hours: float = 0
+    assigned_count: int = 0
+
+
+class ShiftCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64)
+    start_time: str = Field(default="08:00", pattern=_HHMM)
+    end_time: str = Field(default="17:00", pattern=_HHMM)
+    break_minutes: int = Field(default=60, ge=0, le=480)
+    # Monday=0 .. Sunday=6.
+    work_days: list[int] = Field(default_factory=lambda: [0, 1, 2, 3, 4, 5])
+    color: str | None = None
+    is_default: bool = False
+
+
+class ShiftUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=64)
+    start_time: str | None = Field(default=None, pattern=_HHMM)
+    end_time: str | None = Field(default=None, pattern=_HHMM)
+    break_minutes: int | None = Field(default=None, ge=0, le=480)
+    work_days: list[int] | None = None
+    color: str | None = None
+    is_default: bool | None = None
+    active: bool | None = None
+
+
+class ShiftAssignRequest(BaseModel):
+    person_ids: list[str] = Field(min_length=1)
+    # None clears the assignment, putting people back on the default.
+    shift_name: str | None = None
+
+
+# ---------------- Overtime ----------------
+class OvertimeOut(ORMModel):
+    id: str
+    person_id: str
+    person_name: str | None = None
+    person_type: str = "staff"
+    department: str | None = None
+    date: str
+    hours: float = 0
+    rate_multiplier: float = 1.5
+    reason: str | None = None
+    status: str = "Pending"
+    requested_by: str | None = None
+    reviewed_by: str | None = None
+    reviewed_at: datetime | None = None
+    review_note: str | None = None
+    created_at: datetime | None = None
+    # hours x multiplier, so the UI does not re-derive it inconsistently.
+    equivalent_hours: float = 0
+
+
+class OvertimeCreate(BaseModel):
+    person_id: str
+    person_type: str = "staff"
+    date: str = Field(pattern=r"^\d{4}-\d{2}-\d{2}$")
+    # A day has 24 hours; anything above 16 of overtime is a typo, not a shift.
+    hours: float = Field(gt=0, le=16)
+    rate_multiplier: float = Field(default=1.5, ge=1, le=3)
+    reason: str | None = Field(default=None, max_length=500)
+
+
+class OvertimeReviewRequest(BaseModel):
+    status: str          # Approved | Rejected
+    note: str | None = Field(default=None, max_length=500)
+
+
+# ---------------- Attendance import ----------------
+class ImportRowResult(BaseModel):
+    row: int
+    person: str | None = None
+    date: str | None = None
+    status: str | None = None
+    ok: bool
+    error: str | None = None
+
+
+class ImportPreview(BaseModel):
+    """A dry run. Nothing is written until the caller confirms."""
+    total_rows: int
+    valid: int
+    invalid: int
+    would_create: int
+    would_update: int
+    rows: list[ImportRowResult] = []
+    columns: list[str] = []
+
+
+class ImportResult(BaseModel):
+    imported: int
+    skipped: int
+    errors: list[ImportRowResult] = []
+
+
 # ---------------- Complaints ----------------
 class ComplaintOut(ORMModel):
     id: str
@@ -572,6 +683,9 @@ class DashboardStats(BaseModel):
 
 class OkResponse(BaseModel):
     ok: bool = True
+    # Optional human-readable detail, e.g. explaining that a shift was
+    # deactivated rather than deleted because people are still on it.
+    message: str | None = None
 
 
 # ---------------- Messages ----------------

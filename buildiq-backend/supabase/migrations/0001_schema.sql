@@ -266,6 +266,57 @@ create index if not exists ix_attendance_reason_status on public.attendance (rea
     where reason_status is not null;
 
 -- ----------------------------------------------------------------------------
+-- shifts (named working patterns; users.shift references shifts.name)
+create table if not exists public.shifts (
+    id             varchar(64) primary key,
+    name           varchar(64) not null unique,
+    start_time     varchar(5)  not null default '08:00',
+    end_time       varchar(5)  not null default '17:00',
+    break_minutes  integer     not null default 60,
+    -- Monday=0 .. Sunday=6. Six-day week by default.
+    work_days      jsonb       not null default '[0,1,2,3,4,5]',
+    color          varchar(16),
+    is_default     boolean     not null default false,
+    active         boolean     not null default true,
+    created_at     timestamptz not null default now(),
+
+    constraint ck_shifts_break check (break_minutes between 0 and 480)
+);
+create index if not exists ix_shifts_active     on public.shifts (active);
+create index if not exists ix_shifts_is_default on public.shifts (is_default);
+create unique index if not exists uq_shifts_single_default
+    on public.shifts (is_default) where is_default;
+
+-- overtime (separate from attendance: that records presence, this records
+-- extra paid hours and who authorised them)
+create table if not exists public.overtime (
+    id              varchar(64) primary key,
+    person_id       varchar(64) not null,
+    person_name     varchar(160),
+    person_type     varchar(24) not null default 'staff',
+    department      varchar(96),
+    date            varchar(10) not null,
+    hours           double precision not null default 0,
+    rate_multiplier double precision not null default 1.5,
+    reason          text,
+    status          varchar(24) not null default 'Pending',
+    requested_by    varchar(160),
+    reviewed_by     varchar(160),
+    reviewed_at     timestamptz,
+    review_note     text,
+    created_at      timestamptz not null default now(),
+
+    constraint ck_overtime_status check (status in ('Pending','Approved','Rejected')),
+    constraint ck_overtime_person_type check (person_type in ('staff','daily_worker')),
+    constraint ck_overtime_hours check (hours > 0 and hours <= 16),
+    constraint ck_overtime_rate check (rate_multiplier >= 1 and rate_multiplier <= 3)
+);
+create index if not exists ix_overtime_person_id   on public.overtime (person_id);
+create index if not exists ix_overtime_date        on public.overtime (date);
+create index if not exists ix_overtime_department  on public.overtime (department);
+create index if not exists ix_overtime_status      on public.overtime (status);
+create index if not exists ix_overtime_person_date on public.overtime (person_id, date);
+
 -- complaints
 -- ----------------------------------------------------------------------------
 create table if not exists public.complaints (
