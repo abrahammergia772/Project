@@ -257,3 +257,116 @@ def test_numbers_are_not_reused_after_a_deletion(client):
         "full_name": "Temp Two", "email": "temp.two@buildiq.et",
         "role": "Engineer", "department": "Site Operations"}).json()
     assert second["employee_id"] != first["employee_id"]
+
+
+# ---------------- Completeness: EVERYONE is on the register ----------------
+# These exist because the first version of the roster reused
+# visible_members(), which answers "whose records may you manage" rather than
+# "who is on the register". The Workforce & Attendance team saw 6 people out
+# of 45 and the Super Admin saw 2. Every test in this file passed anyway:
+# they all checked shape and scoping, and none checked COUNT. That is the
+# gap these close.
+
+def _internal_staff_count(client) -> int:
+    members = client.get("/members", headers=_tok(client, "admin@buildiq.et")).json()
+    return len([m for m in members if m["role"] != "Client"])
+
+
+def test_the_workforce_team_sees_every_single_employee(client):
+    """Their job is registering the whole organisation, so the register must
+    contain the whole organisation -- not just their own department."""
+    wf = _tok(client, WORKFORCE_TAKER)
+    admin = _tok(client, "admin@buildiq.et")
+
+    people = client.get("/attendance/roster", params={"month": "2026-08"},
+                        headers=wf).json()["people"]
+    staff = [p for p in people if p["person_type"] == "staff"]
+    workers = [p for p in people if p["person_type"] == "daily_worker"]
+
+    expected_staff = _internal_staff_count(client)
+    expected_workers = len(client.get("/daily-workers", headers=admin).json())
+
+    assert len(staff) == expected_staff, (
+        f"register shows {len(staff)} staff but the organisation has "
+        f"{expected_staff} -- somebody cannot be marked")
+    assert len(workers) == expected_workers
+    assert len(people) == expected_staff + expected_workers
+
+
+def test_a_workforce_engineer_also_sees_everyone(client):
+    """Attendance is department-based, not role-based: an Engineer in
+    Workforce & Attendance takes the register for the whole organisation."""
+    eng = _tok(client, "samuel.gebre.5@buildiq.et")
+    people = client.get("/attendance/roster", params={"month": "2026-08"},
+                        headers=eng).json()["people"]
+    staff = [p for p in people if p["person_type"] == "staff"]
+    assert len(staff) == _internal_staff_count(client)
+
+
+def test_org_wide_roles_see_everyone(client):
+    """The Super Admin sat in Executive, so the old department filter cut
+    their register down to two people."""
+    expected = _internal_staff_count(client)
+    for email in ("admin@buildiq.et", "gm@buildiq.et", "auditor@buildiq.et"):
+        people = client.get("/attendance/roster", params={"month": "2026-08"},
+                            headers=_tok(client, email)).json()["people"]
+        staff = [p for p in people if p["person_type"] == "staff"]
+        assert len(staff) == expected, f"{email} sees {len(staff)} of {expected}"
+
+
+def test_every_role_is_represented_on_the_register(client):
+    """Not just Engineers: managers, auditors and admins are employees too
+    and all of them must be markable."""
+    people = client.get("/attendance/roster", params={"month": "2026-08"},
+                        headers=_tok(client, WORKFORCE_TAKER)).json()["people"]
+    ids = {p["id"] for p in people}
+
+    members = client.get("/members", headers=_tok(client, "admin@buildiq.et")).json()
+    missing = [f'{m["full_name"]} ({m["role"]})'
+               for m in members if m["role"] != "Client" and m["id"] not in ids]
+    assert not missing, f"not on the register: {missing[:10]}"
+
+    roles = {m["role"] for m in members
+             if m["role"] != "Client" and m["id"] in ids}
+    for expected in ("Super Admin", "General Manager", "Department Manager",
+                     "Project Manager", "Engineer", "Auditor"):
+        assert expected in roles, f"no {expected} on the register"
+
+
+def test_the_register_spans_more_than_one_department(client):
+    """The single clearest symptom of the old bug: every person on the
+    register belonged to the viewer's own department."""
+    people = client.get("/attendance/roster", params={"month": "2026-08"},
+                        headers=_tok(client, WORKFORCE_TAKER)).json()["people"]
+    depts = {p["department"] for p in people if p["person_type"] == "staff"}
+    assert len(depts) > 1, f"register is confined to {depts}"
+
+
+def test_daily_workers_and_staff_are_both_markable(client):
+    """One register, both populations -- 'all user, worker, daily workers'."""
+    wf = _tok(client, WORKFORCE_TAKER)
+    people = client.get("/attendance/roster", params={"month": "2026-08"},
+                        headers=wf).json()["people"]
+
+    for kind in ("staff", "daily_worker"):
+        person = next(p for p in people if p["person_type"] == kind)
+        r = client.post("/attendance", headers=wf, json={
+            "date": "2026-08-20",
+            "marks": [{"person_id": person["id"], "person_type": kind,
+                       "status": "Present"}],
+        })
+        assert r.status_code == 200, f"{kind}: {r.text}"
+
+
+def test_a_department_manager_is_still_scoped(client):
+    """Widening the register must not widen it for everyone -- a manager
+    outside Workforce & Attendance still only oversees their own people."""
+    dm = _tok(client, "meron.tadesse@buildiq.et")
+    me = client.get("/auth/me", headers=dm).json()
+    r = client.get("/attendance/roster", params={"month": "2026-08"}, headers=dm)
+    if r.status_code == 403:
+        return
+    staff = [p for p in r.json()["people"] if p["person_type"] == "staff"]
+    assert staff, "a manager should still see their own department"
+    assert len(staff) < _internal_staff_count(client), "should NOT see everyone"
+    assert {p["department"] for p in staff} <= {me["department"], None}

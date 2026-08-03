@@ -18,7 +18,7 @@ from .models import (
 )
 from .security import (
     AUDITOR, CLIENT, DEPARTMENT_MANAGER, ENGINEER, ORG_WIDE, PROJECT_MANAGER,
-    has_full_project_access, is_workforce_dept,
+    can_take_attendance, has_full_project_access, is_workforce_dept,
 )
 
 
@@ -190,6 +190,37 @@ def visible_complaints(db: Session, user: User) -> list[Complaint]:
     else:                                  # Auditor has no complaint access
         return []
     return list(db.scalars(stmt).all())
+
+
+def registerable_staff(db: Session, user: User) -> list[User]:
+    """Everyone who belongs on the attendance register, scoped to the viewer.
+
+    This is deliberately NOT visible_members(). That answers "whose records
+    may you manage", which is a much narrower question -- an Engineer's
+    answer is "only yourself", and a Super Admin's is filtered by their own
+    department. Reusing it here meant the Workforce & Attendance team, whose
+    entire job is registering the organisation, could see six people, and the
+    Super Admin two.
+
+    Taking the register covers ALL internal staff. Clients are external and
+    are never registered. Mirrors Roles.isRegisterable in js/roles.js.
+    """
+    internal = select(User).where(User.role != CLIENT)
+
+    # The workforce team registers the whole organisation -- that is the job.
+    # Org-wide roles and the Auditor get the same list for oversight.
+    if can_take_attendance(user) or user.role in ORG_WIDE or user.role == AUDITOR:
+        return list(db.scalars(internal).all())
+
+    if user.role == DEPARTMENT_MANAGER:
+        return list(db.scalars(internal.where(User.department == user.department)).all())
+
+    if user.role == PROJECT_MANAGER:
+        ids = managed_team_ids(db, user) | {user.id}
+        return list(db.scalars(internal.where(User.id.in_(ids))).all())
+
+    # Everyone else sees only their own row.
+    return list(db.scalars(internal.where(User.id == user.id)).all())
 
 
 def visible_attendance(db: Session, user: User) -> list[Attendance]:

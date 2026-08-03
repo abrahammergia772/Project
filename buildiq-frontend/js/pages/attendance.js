@@ -113,7 +113,11 @@ const AttendancePage = (() => {
     const todayRecords = scopedAttendance.filter(a => a.date === today);
     const presentToday = todayRecords.filter(a => a.status === "Present").length;
     const absentToday = todayRecords.filter(a => a.status === "Absent").length;
-    const totalPeople = scopedStaff.length + scopedWorkers.length;
+    // Prefer the server's roster count. DataStore.members comes from
+    // /members, which is record-visibility scoped -- an Engineer sees only
+    // themselves there -- so counting it locally showed the Workforce &
+    // Attendance team "2 tracked people" while the grid listed 75.
+    const totalPeople = roster?.people?.length ?? (scopedStaff.length + scopedWorkers.length);
     const notMarkedToday = Math.max(0, totalPeople - todayRecords.length);
     const ranked = AIEngine.rankAbsences(scopedAttendance);
     const flagged = ranked.filter(r => r.ai_risk === "CRITICAL" || r.ai_risk === "HIGH").length;
@@ -406,6 +410,9 @@ const AttendancePage = (() => {
       return;
     }
     paintGrid(el);
+    // The roster is the authoritative headcount; refresh the cards now that
+    // it has landed.
+    renderStats();
   }
 
   function paintGrid(el) {

@@ -18,7 +18,7 @@ from .. import ai_engine
 from ..database import get_db
 from ..deps import (
     attendance_dict, new_id, own_attendance, push_notification, record_audit, utcnow,
-    visible_attendance, visible_daily_workers, visible_members,
+    registerable_staff, visible_attendance, visible_daily_workers,
 )
 from ..models import Attendance, DailyWorker, User
 from ..schemas import (
@@ -73,9 +73,10 @@ def attendance_roster(
     even per-person, would be hundreds of requests; this returns the roster
     and the marks together so the grid renders from a single response.
 
-    Scoping is unchanged: the Workforce & Attendance department sees the whole
-    organisation, other managers see their own department. Clients are never
-    on a register.
+    Scoping: the Workforce & Attendance department, org-wide roles and the
+    Auditor see every internal member; a Department Manager sees their own
+    department; a Project Manager sees their team. Clients are external and
+    are never on a register.
     """
     if not can_view_attendance(user):
         raise HTTPException(status.HTTP_403_FORBIDDEN,
@@ -87,12 +88,11 @@ def attendance_roster(
     days = calendar.monthrange(year, mon)[1]
     first, last = f"{month}-01", f"{month}-{days:02d}"
 
-    # Staff: everyone internal. Clients are external and never registered.
-    staff = [m for m in visible_members(db, user) if m.role != "Client"]
-    if not can_take_attendance(user):
-        # A non-workforce manager only oversees their own department.
-        staff = [m for m in staff if m.department == user.department]
-
+    # registerable_staff(), NOT visible_members(). The latter answers "whose
+    # records may you manage" -- a much narrower question that returned six
+    # people for the Workforce & Attendance team and two for the Super Admin.
+    # Taking the register covers every internal member of the organisation.
+    staff = registerable_staff(db, user)
     workers = visible_daily_workers(db, user)
 
     people = [{
