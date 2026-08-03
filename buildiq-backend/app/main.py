@@ -7,6 +7,7 @@ FastAPI application entrypoint.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 import time
 from contextlib import asynccontextmanager
 
@@ -77,6 +78,64 @@ def _add_missing_columns() -> None:
                 log.warning("Added missing column %s.%s", table.name, column.name)
             except Exception as exc:               # pragma: no cover
                 log.warning("Could not add %s.%s: %s", table.name, column.name, exc)
+
+
+def _backfill_employee_ids() -> None:
+    """Give every person a readable staff number, once.
+
+    The register shows EMP-2026-0001 rather than the internal id (mem_1),
+    which nobody outside the database recognises. Existing rows predate the
+    column, so they are numbered here on first boot after the upgrade.
+
+    Ordered by join date so the numbers follow seniority rather than whatever
+    order the rows happen to come back in. Daily workers use a DW- prefix so
+    the two populations stay distinguishable at a glance.
+
+    Never renumbers anyone who already has an id -- a staff number that
+    changes is worse than no staff number at all.
+    """
+    from sqlalchemy import or_, select
+
+    from .models import DailyWorker, User
+
+    db = SessionLocal()
+    try:
+        year = datetime.now(timezone.utc).year
+        for model, prefix in ((User, "EMP"), (DailyWorker, "DW")):
+            try:
+                rows = list(db.scalars(
+                    select(model)
+                    .where(or_(model.employee_id.is_(None), model.employee_id == ""))
+                    .order_by(model.joined.asc(), model.id.asc())
+                ).all())
+            except Exception:
+                continue                      # column not there yet on this DB
+            if not rows:
+                continue
+
+            taken = {
+                v for (v,) in db.execute(
+                    select(model.employee_id).where(model.employee_id.is_not(None))
+                ).all()
+            }
+            n = 0
+            for row in rows:
+                # Skip past numbers already in use rather than colliding on
+                # the UNIQUE index and losing the whole batch.
+                while True:
+                    n += 1
+                    candidate = f"{prefix}-{year}-{n:04d}"
+                    if candidate not in taken:
+                        break
+                row.employee_id = candidate
+                taken.add(candidate)
+            log.info("Assigned %d %s numbers", len(rows), prefix)
+        db.commit()
+    except Exception as exc:                   # never block startup
+        log.warning("Could not backfill employee ids: %s", exc)
+        db.rollback()
+    finally:
+        db.close()
 
 
 @asynccontextmanager
@@ -167,6 +226,11 @@ async def lifespan(_: FastAPI):
             db.rollback()
         finally:
             db.close()
+
+    # AFTER seeding, not before: on a fresh database the seed runs in the same
+    # boot, so numbering first would find an empty table and leave every
+    # seeded member without a staff number.
+    _backfill_employee_ids()
 
     yield
     log.info("Shutting down")

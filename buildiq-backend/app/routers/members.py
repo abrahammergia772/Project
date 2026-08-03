@@ -11,7 +11,10 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..deps import member_dict, new_id, push_notification, record_audit, visible_members
+from ..deps import (
+    member_dict, new_id, next_employee_id, push_notification, record_audit,
+    visible_members,
+)
 from ..models import Client, Department, User
 from ..schemas import (
     ClientCreate, ClientOut, DepartmentAssign, MemberCreate, MemberOut, MemberUpdate,
@@ -81,6 +84,10 @@ def create_member(payload: MemberCreate, user: User = Depends(get_current_user),
         job_title=payload.job_title or ("Project Manager" if payload.role == "Project Manager" else "Site Engineer"),
         experience_years=payload.experience_years, skills=payload.skills,
         phone=payload.phone, org_name="Wolaita Construction Group", status="Active",
+        # Allocated at creation, not only by the startup backfill: a member
+        # added at 10am should appear on the register with a number, not
+        # wait for the next restart.
+        employee_id=next_employee_id(db),
     )
     db.add(member)
     db.commit()

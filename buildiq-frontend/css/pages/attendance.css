@@ -126,3 +126,91 @@
   .my-att-row { grid-template-columns: 52px 1fr; }
   .my-att-actions { grid-column: 1 / -1; }
 }
+
+/* ============================================================
+   Record Attendance — monthly grid
+   People down the side, days across the top, like a paper register.
+   ============================================================ */
+.month-nav { display: flex; align-items: center; gap: 8px; }
+.month-nav b { min-width: 140px; text-align: center; font-size: 14px; }
+
+.grid-legend {
+  display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 12px; font-size: 12px; color: var(--text-muted);
+}
+.grid-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.cell-swatch {
+  width: 13px; height: 13px; border-radius: 3px; display: inline-block;
+  border: 1px solid var(--border);
+}
+.cell-swatch.present { background: rgba(var(--green-rgb), 0.30); border-color: var(--green); }
+.cell-swatch.absent  { background: rgba(var(--red-rgb), 0.30); border-color: var(--red); }
+.cell-swatch.unset   { background: var(--bg-input); }
+.grid-hint { margin-left: auto; font-style: italic; }
+
+/* The wrapper scrolls, not the page: a 31-column table is far wider than a
+   phone, and the person column stays pinned while the days move. */
+.att-grid-wrap {
+  overflow: auto;
+  max-height: calc(100vh - var(--topbar-h) - 340px);
+  min-height: 320px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  -webkit-overflow-scrolling: touch;
+}
+.att-grid { border-collapse: separate; border-spacing: 0; width: max-content; min-width: 100%; }
+
+/* Sticky in BOTH directions: the header row stays while scrolling down, the
+   name column stays while scrolling right. Without the name column pinned,
+   a cell in the middle of the month belongs to nobody you can see. */
+.att-grid thead th {
+  position: sticky; top: 0; z-index: 2;
+  background: var(--bg-surface); border-bottom: 1px solid var(--border);
+}
+.att-grid-person {
+  position: sticky; left: 0; z-index: 3;
+  background: var(--bg-card); border-right: 1px solid var(--border);
+  text-align: left; padding: 10px 14px; min-width: 230px; max-width: 260px;
+}
+.att-grid thead .att-grid-person { z-index: 4; background: var(--bg-surface); }
+
+.agp-name { font-size: 13.5px; font-weight: 700; color: var(--text-primary); }
+.agp-meta { font-size: 11px; color: var(--text-muted); margin-top: 2px; font-family: var(--font-mono, monospace); }
+.agp-shift { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+.att-grid-day {
+  width: 38px; min-width: 38px; padding: 6px 0; text-align: center; cursor: pointer;
+  user-select: none;
+}
+.att-grid-day:hover { background: var(--bg-hover); }
+.att-grid-day .dnum { display: block; font-size: 12.5px; font-weight: 700; }
+.att-grid-day .ddow { display: block; font-size: 9.5px; color: var(--text-muted); text-transform: uppercase; }
+.att-grid-day.rest { background: var(--bg-input); }
+.att-grid-day.today { box-shadow: inset 0 -3px 0 var(--accent); }
+
+.att-cell {
+  width: 38px; min-width: 38px; height: 40px; text-align: center;
+  border-bottom: 1px solid var(--border); border-right: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 700; cursor: pointer; color: var(--text-muted);
+  transition: background var(--t-fast);
+}
+.att-cell:hover { background: var(--bg-hover); }
+.att-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.att-cell.present { background: rgba(var(--green-rgb), 0.22); color: var(--green); }
+.att-cell.absent  { background: rgba(var(--red-rgb), 0.22); color: var(--red); }
+.att-cell.rest    { background: var(--bg-input); }
+/* Days that have not happened cannot be marked. */
+.att-cell.future  { cursor: not-allowed; opacity: 0.35; }
+/* An unsaved change is visibly different from a stored one, so it is obvious
+   what will be lost by navigating away. */
+.att-cell.edited { box-shadow: inset 0 0 0 2px var(--accent); }
+
+.att-grid-row:hover .att-grid-person { background: var(--bg-hover); }
+
+@media (max-width: 640px) {
+  .att-grid-person { min-width: 170px; max-width: 180px; padding: 8px 10px; }
+  .agp-shift { display: none; }
+  .grid-hint { display: none; }
+  .att-grid-wrap { max-height: calc(100dvh - var(--topbar-h) - 300px); }
+}

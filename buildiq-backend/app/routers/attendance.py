@@ -5,6 +5,7 @@ the personal absence-reason workflow, and the AI absence ranking.
 """
 from __future__ import annotations
 
+import calendar
 import csv
 import io
 
@@ -17,7 +18,7 @@ from .. import ai_engine
 from ..database import get_db
 from ..deps import (
     attendance_dict, new_id, own_attendance, push_notification, record_audit, utcnow,
-    visible_attendance, visible_daily_workers,
+    visible_attendance, visible_daily_workers, visible_members,
 )
 from ..models import Attendance, DailyWorker, User
 from ..schemas import (
@@ -29,6 +30,9 @@ from ..security import (
 )
 
 router = APIRouter(tags=["attendance"])
+
+# Shown when a person has no explicit shift assigned.
+DEFAULT_SHIFT = "Regular Shift"
 
 REASON_CATEGORIES = [
     "Sick Leave", "Family Emergency", "Medical Appointment", "Transport Problem",
@@ -55,6 +59,81 @@ def list_attendance(
     if person_type:
         records = [a for a in records if a.person_type == person_type]
     return [attendance_dict(a) for a in records]
+
+
+@router.get("/attendance/roster")
+def attendance_roster(
+    month: str = Query(..., pattern=r"^\d{4}-\d{2}$", description="YYYY-MM"),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Everyone on the register plus a whole month of marks, in one call.
+
+    The monthly grid needs N people x ~31 days. Fetching that per-cell, or
+    even per-person, would be hundreds of requests; this returns the roster
+    and the marks together so the grid renders from a single response.
+
+    Scoping is unchanged: the Workforce & Attendance department sees the whole
+    organisation, other managers see their own department. Clients are never
+    on a register.
+    """
+    if not can_view_attendance(user):
+        raise HTTPException(status.HTTP_403_FORBIDDEN,
+                            f"Access denied — {user.role} has no attendance access")
+
+    year, mon = (int(x) for x in month.split("-"))
+    if not 1 <= mon <= 12:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Month must be 01-12")
+    days = calendar.monthrange(year, mon)[1]
+    first, last = f"{month}-01", f"{month}-{days:02d}"
+
+    # Staff: everyone internal. Clients are external and never registered.
+    staff = [m for m in visible_members(db, user) if m.role != "Client"]
+    if not can_take_attendance(user):
+        # A non-workforce manager only oversees their own department.
+        staff = [m for m in staff if m.department == user.department]
+
+    workers = visible_daily_workers(db, user)
+
+    people = [{
+        "id": m.id,
+        "name": m.full_name,
+        "employee_id": getattr(m, "employee_id", None),
+        "department": m.department,
+        "job_title": m.job_title,
+        "shift": getattr(m, "shift", None) or DEFAULT_SHIFT,
+        "avatar_color": m.avatar_color,
+        "has_avatar": bool(getattr(m, "avatar_url", None)),
+        "person_type": "staff",
+    } for m in staff] + [{
+        "id": w.id,
+        "name": w.full_name,
+        "employee_id": getattr(w, "employee_id", None),
+        "department": w.department,
+        "job_title": w.trade,
+        "shift": getattr(w, "shift", None) or DEFAULT_SHIFT,
+        "avatar_color": w.avatar_color,
+        "has_avatar": False,
+        "person_type": "daily_worker",
+    } for w in workers]
+    people.sort(key=lambda p: (p["name"] or "").lower())
+
+    ids = {p["id"] for p in people}
+    marks = [a for a in visible_attendance(db, user)
+             if first <= a.date <= last and a.person_id in ids]
+
+    return {
+        "month": month,
+        "days": days,
+        "people": people,
+        # Keyed person_id -> date -> status, which is exactly how the grid
+        # looks a cell up. Building it here avoids an O(people x days) scan
+        # over a flat list in the browser.
+        "marks": {
+            p: {a.date: a.status for a in marks if a.person_id == p}
+            for p in {a.person_id for a in marks}
+        },
+    }
 
 
 @router.get("/attendance/me", response_model=list[AttendanceOut])

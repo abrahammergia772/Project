@@ -101,6 +101,8 @@ class MemberOut(ORMModel):
     joined: datetime | None = None
     avatar_color: str | None = None
     has_avatar: bool = False
+    employee_id: str | None = None
+    shift: str | None = None
 
 
 class MemberCreate(BaseModel):
@@ -383,6 +385,8 @@ class DailyWorkerOut(ORMModel):
     phone: str | None = None
     status: str = "Active"
     avatar_color: str | None = None
+    employee_id: str | None = None
+    shift: str | None = None
     joined: datetime | None = None
 
 

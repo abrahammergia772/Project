@@ -898,6 +898,20 @@ const API = (() => {
     analyzeProject: (id) => BUILDIQ_CONFIG.MOCK_MODE ? Mock.analyzeProject(id) : request(`/projects/${id}/analyze`, { method: "POST" }),
 
     // Attendance (Workforce & Attendance dept takes it; everyone explains their own absences)
+    // Roster + a whole month of marks in one call. The grid is N people x 31
+    // days; fetching per cell would be hundreds of requests.
+    getAttendanceRoster: (month) => BUILDIQ_CONFIG.MOCK_MODE
+      ? Promise.resolve({
+          month, days: new Date(+month.slice(0,4), +month.slice(5,7), 0).getDate(),
+          people: MockData.members.filter(m => m.role !== "Client").map(m => ({
+            id: m.id, name: m.full_name, employee_id: m.employee_id || null,
+            department: m.department, job_title: m.job_title,
+            shift: m.shift || "Regular Shift", avatar_color: m.avatar_color,
+            has_avatar: false, person_type: "staff",
+          })),
+          marks: {},
+        })
+      : request("/attendance/roster", { params: { month } }),
     saveAttendance: (date, marks) => BUILDIQ_CONFIG.MOCK_MODE
       ? Mock.saveAttendance(date, marks)
       : request("/attendance", { method: "POST", body: { date, marks } }),

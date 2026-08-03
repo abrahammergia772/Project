@@ -15,7 +15,7 @@ from .. import rate_limit
 from ..config import settings
 from ..database import get_db
 from ..password_policy import PasswordPolicyError, validate_password
-from ..deps import new_id, record_audit, utcnow
+from ..deps import new_id, next_employee_id, record_audit, utcnow
 from ..models import Client, PasswordResetToken, User
 from ..schemas import (
     ForgotPasswordRequest, ForgotPasswordResponse, LoginRequest, OkResponse,
@@ -165,6 +165,9 @@ def signup(payload: SignupRequest, request: Request, db: Session = Depends(get_d
         experience_years=payload.experience_years or 0,
         client_id=client_id,
         linked_project=payload.linked_project,
+        # Same reason as POST /members: a new account is on the register
+        # immediately, not after the next restart.
+        employee_id=next_employee_id(db),
         joined=utcnow(),
     )
     db.add(user)

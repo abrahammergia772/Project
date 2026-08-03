@@ -31,6 +31,39 @@ def utcnow() -> datetime:
 
 
 # ---------------- Audit ----------------
+def next_employee_id(db: Session, model=None, prefix: str = "EMP") -> str:
+    """Allocate the next free staff number, e.g. EMP-2026-0007.
+
+    Every path that creates a person must call this. The startup backfill
+    alone was not enough: it numbers whoever exists at boot, so anyone
+    created afterwards through signup or POST /members had a blank column
+    until the next restart.
+
+    Scans for the highest number already issued this year rather than
+    counting rows, because deleting a member must not cause the next one to
+    reuse their number.
+    """
+    from sqlalchemy import select
+
+    from .models import User
+
+    model = model or User
+    year = utcnow().year
+    like = f"{prefix}-{year}-%"
+    existing = [
+        v for (v,) in db.execute(
+            select(model.employee_id).where(model.employee_id.like(like))
+        ).all() if v
+    ]
+    highest = 0
+    for value in existing:
+        try:
+            highest = max(highest, int(value.rsplit("-", 1)[1]))
+        except (IndexError, ValueError):
+            continue
+    return f"{prefix}-{year}-{highest + 1:04d}"
+
+
 def record_audit(db: Session, actor: User | None, action: str, resource: str, commit: bool = True) -> AuditLog:
     """Every meaningful mutation funnels through here."""
     actor_name = actor.full_name if actor else "System"
@@ -235,6 +268,8 @@ def member_dict(u: User) -> dict:
         "on_time_pct": u.on_time_pct, "phone": u.phone, "joined": u.joined,
         "avatar_color": u.avatar_color,
         "has_avatar": bool(getattr(u, "avatar_url", None)),
+        "employee_id": getattr(u, "employee_id", None),
+        "shift": getattr(u, "shift", None),
     }
 
 

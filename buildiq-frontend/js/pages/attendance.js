@@ -20,8 +20,6 @@ const AttendancePage = (() => {
   let scopedStaff = [];
   let scopedWorkers = [];
   let activeTab = "take";
-  let selectedDate = new Date().toISOString().slice(0, 10);
-  const pendingMarks = {}; // person_id -> status, for the "take attendance" draft
 
   function subtitle() {
     if (Roles.canTakeAttendance(user)) return "Workforce & Attendance — you are responsible for taking the daily register";
@@ -37,7 +35,7 @@ const AttendancePage = (() => {
     const canSeeReasons = Roles.canViewAbsenceReasons(user);
     // Every role gets "My Attendance"; oversight tabs are added on top.
     const tabs = [];
-    if (canTake) tabs.push({ key: "take", label: "Take Attendance" });
+    if (canTake) tabs.push({ key: "take", label: "Record Attendance" });
     tabs.push({ key: "mine", label: "My Attendance" });
     if (canSeeReasons) tabs.push({ key: "reasons", label: "Absence Reasons" });
     if (canOversee) {
@@ -348,60 +346,315 @@ const AttendancePage = (() => {
     });
   }
 
-  // ---------------- Take Attendance ----------------
-  function renderTakeAttendance(el) {
-    const people = [
-      ...scopedStaff.map(m => ({ id: m.id, name: m.full_name, sub: `${m.job_title} · Staff`, avatar_color: m.avatar_color, type: "staff" })),
-      ...scopedWorkers.map(w => ({ id: w.id, name: w.full_name, sub: `${w.trade} · Daily Worker`, avatar_color: w.avatar_color, type: "daily_worker" })),
-    ];
+  // ---------------- Record Attendance (monthly grid) ----------------
+  /* People down the side, days of the month across the top -- the shape of a
+     paper register, and the one thing the old one-day list could not do:
+     see a whole month at once and back-fill a day that was missed.
+
+     Rendered from ONE request (GET /attendance/roster?month=YYYY-MM) that
+     returns the roster and every mark for the month together. A grid of ~46
+     people x 31 days is 1,426 cells; fetching per cell, or even per person,
+     would be hundreds of round trips. */
+
+  let gridMonth = new Date().toISOString().slice(0, 7);   // YYYY-MM
+  let roster = null;                                       // last server payload
+  const gridEdits = {};                                    // "personId|date" -> status
+
+  const STATUS_CYCLE = [null, "Present", "Absent"];
+  const STATUS_MARK = { Present: "P", Absent: "A" };
+
+  function monthLabel(ym) {
+    const [y, m] = ym.split("-").map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString(undefined,
+      { month: "long", year: "numeric" });
+  }
+
+  function shiftMonth(ym, delta) {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  }
+
+  function cellKey(personId, date) { return `${personId}|${date}`; }
+
+  function statusFor(personId, date) {
+    const edited = gridEdits[cellKey(personId, date)];
+    if (edited !== undefined) return edited;
+    return roster?.marks?.[personId]?.[date] || null;
+  }
+
+  function dayMeta(ym, day) {
+    const [y, m] = ym.split("-").map(Number);
+    const d = new Date(y, m - 1, day);
+    return {
+      date: `${ym}-${String(day).padStart(2, "0")}`,
+      dow: d.toLocaleDateString(undefined, { weekday: "short" }).slice(0, 3),
+      // Sunday only: Ethiopian construction weeks are six days, so Saturday
+      // is a normal working day and must not be greyed out.
+      isRest: d.getDay() === 0,
+      isFuture: d > new Date(),
+    };
+  }
+
+  async function renderTakeAttendance(el) {
+    el.innerHTML = Components.skeletonGrid(4, "row");
+    try {
+      roster = await API.getAttendanceRoster(gridMonth);
+    } catch (err) {
+      el.innerHTML = Components.createEmptyState("fa-triangle-exclamation",
+        "Could not load the register", err.message);
+      return;
+    }
+    paintGrid(el);
+  }
+
+  function paintGrid(el) {
+    const days = Array.from({ length: roster.days }, (_, i) => dayMeta(gridMonth, i + 1));
+    const people = roster.people;
+    const today = new Date().toISOString().slice(0, 10);
+    const pending = Object.keys(gridEdits).length;
+
     el.innerHTML = `
       <div class="attendance-toolbar">
-        <div class="field" style="margin-bottom:0;"><label>Date</label><input class="input" type="date" id="attDate" value="${selectedDate}" max="${new Date().toISOString().slice(0,10)}"></div>
-        <button class="btn btn-secondary btn-sm" id="markAllPresentBtn" style="align-self:flex-end;"><i class="fa-solid fa-check-double"></i> Mark All Present</button>
-        <button class="btn btn-secondary btn-sm" id="markAllAbsentBtn" style="align-self:flex-end;"><i class="fa-solid fa-user-slash"></i> Mark All Absent</button>
-        <button class="btn btn-secondary btn-sm" id="exportAttendanceBtn" style="align-self:flex-end; margin-left:auto;"><i class="fa-solid fa-file-csv"></i> Download CSV</button>
-        <button class="btn btn-primary" id="saveAttendanceBtn" style="align-self:flex-end;"><i class="fa-solid fa-floppy-disk"></i> Save Attendance</button>
+        <div class="month-nav">
+          <button class="icon-btn" id="gridPrev" aria-label="Previous month"><i class="fa-solid fa-chevron-left"></i></button>
+          <b id="gridMonthLabel">${Utils.escapeHtml(monthLabel(gridMonth))}</b>
+          <button class="icon-btn" id="gridNext" aria-label="Next month"><i class="fa-solid fa-chevron-right"></i></button>
+        </div>
+        <input class="input" id="gridSearch" type="search" placeholder="Search name, ID or department..." style="max-width:280px;">
+        <button class="btn btn-secondary btn-sm" id="gridTodayPresent"><i class="fa-solid fa-check-double"></i> All present today</button>
+        <button class="btn btn-secondary btn-sm" id="exportAttendanceBtn"><i class="fa-solid fa-file-csv"></i> Download CSV</button>
+        <button class="btn btn-primary" id="saveAttendanceBtn" ${pending ? "" : "disabled"}>
+          <i class="fa-solid fa-floppy-disk"></i> Save${pending ? ` (${pending})` : ""}
+        </button>
       </div>
-      <div id="attendanceRows">${people.map(p => attendanceRowHtml(p)).join("")}</div>`;
 
-    document.getElementById("attDate").addEventListener("change", (e) => { selectedDate = e.target.value; loadExistingMarksForDate(); renderTakeAttendance(el); });
-    document.getElementById("markAllPresentBtn").addEventListener("click", () => {
-      people.forEach(p => pendingMarks[p.id] = "Present");
-      renderTakeAttendance(el);
-    });
-    document.getElementById("markAllAbsentBtn").addEventListener("click", () => {
-      people.forEach(p => pendingMarks[p.id] = "Absent");
-      renderTakeAttendance(el);
-    });
-    document.getElementById("saveAttendanceBtn").addEventListener("click", () => saveAttendance(people));
-    document.getElementById("exportAttendanceBtn").addEventListener("click", () => downloadRegister(selectedDate));
+      <div class="grid-legend">
+        <span><i class="cell-swatch present"></i> Present</span>
+        <span><i class="cell-swatch absent"></i> Absent</span>
+        <span><i class="cell-swatch unset"></i> Not marked</span>
+        <span class="grid-hint">Click a cell to cycle · click a day number to mark the column</span>
+      </div>
 
-    Utils.qsa(".attendance-status-toggle button", el).forEach(btn => btn.addEventListener("click", () => {
-      pendingMarks[btn.dataset.person] = btn.dataset.status;
-      renderTakeAttendance(el);
-    }));
-    loadExistingMarksForDate();
+      <div class="att-grid-wrap">
+        <table class="att-grid">
+          <thead>
+            <tr>
+              <th class="att-grid-person">Employee Identity</th>
+              ${days.map(d => `
+                <th class="att-grid-day${d.isRest ? " rest" : ""}${d.date === today ? " today" : ""}"
+                    data-date="${d.date}" title="Mark the whole column for ${d.date}">
+                  <span class="dnum">${Number(d.date.slice(-2))}</span>
+                  <span class="ddow">${d.dow}</span>
+                </th>`).join("")}
+            </tr>
+          </thead>
+          <tbody id="attGridBody">
+            ${people.map(p => personRowHtml(p, days, today)).join("")}
+          </tbody>
+        </table>
+      </div>
+      ${people.length ? "" : Components.createEmptyState("fa-users-slash", "Nobody on the register", "No members are in scope for you.")}`;
+
+    wireGrid(el);
   }
 
-  function attendanceRowHtml(p) {
-    const existing = DataStore.attendance.find(a => a.person_id === p.id && a.date === selectedDate);
-    const current = pendingMarks[p.id] || existing?.status || null;
+  function personRowHtml(p, days, today) {
     return `
-      <div class="take-attendance-row">
-        <div class="flex items-center gap-12">
-          ${Components.createAvatar(p.name, "sm", p.avatar_color)}
-          <div><div style="font-weight:600; font-size:13.5px;">${Utils.escapeHtml(p.name)}</div><div style="font-size:11.5px; color:var(--text-muted);">${Utils.escapeHtml(p.sub)}</div></div>
-        </div>
-        <div class="attendance-status-toggle">
-          <button data-person="${p.id}" data-status="Present" class="${current === "Present" ? "active" : ""}"><i class="fa-solid fa-check"></i> Present</button>
-          <button data-person="${p.id}" data-status="Absent" class="${current === "Absent" ? "active" : ""}"><i class="fa-solid fa-xmark"></i> Absent</button>
-        </div>
-      </div>`;
+      <tr class="att-grid-row" data-person="${p.id}"
+          data-search="${Utils.escapeHtml(`${p.name} ${p.employee_id || ""} ${p.department || ""} ${p.job_title || ""}`.toLowerCase())}">
+        <th class="att-grid-person">
+          <div class="agp-name">${Utils.escapeHtml(p.name)}</div>
+          <div class="agp-meta">${Utils.escapeHtml(p.employee_id || "—")} | ${Utils.escapeHtml(p.department || "—")}</div>
+          <div class="agp-shift">Shift: ${Utils.escapeHtml(p.shift || "Regular Shift")}</div>
+        </th>
+        ${days.map(d => {
+          const st = statusFor(p.id, d.date);
+          const edited = gridEdits[cellKey(p.id, d.date)] !== undefined;
+          return `<td class="att-cell${st ? " " + st.toLowerCase() : ""}${d.isRest ? " rest" : ""}${d.isFuture ? " future" : ""}${edited ? " edited" : ""}"
+                      data-person="${p.id}" data-type="${p.person_type}" data-date="${d.date}"
+                      ${d.isFuture ? "" : 'tabindex="0" role="button"'}
+                      aria-label="${Utils.escapeHtml(p.name)} ${d.date}: ${st || "not marked"}">
+                    ${st ? STATUS_MARK[st] : ""}
+                  </td>`;
+        }).join("")}
+      </tr>`;
   }
 
-  function loadExistingMarksForDate() {
-    // Pre-fill pendingMarks with whatever's already recorded for the selected date so re-opening the page doesn't lose data
-    DataStore.attendance.filter(a => a.date === selectedDate).forEach(a => { if (!(a.person_id in pendingMarks)) pendingMarks[a.person_id] = a.status; });
+  function cycleCell(td) {
+    // Future days cannot be marked: recording attendance for a day that has
+    // not happened is always a mistake, and the old date input already
+    // capped at today.
+    if (td.classList.contains("future")) return;
+    const { person, date } = td.dataset;
+    const current = statusFor(person, date);
+    const next = STATUS_CYCLE[(STATUS_CYCLE.indexOf(current) + 1) % STATUS_CYCLE.length];
+
+    const original = roster?.marks?.[person]?.[date] || null;
+    if (next === original) delete gridEdits[cellKey(person, date)];
+    else gridEdits[cellKey(person, date)] = next;
+
+    // Repaint just this cell -- redrawing 1,400 cells on every click made the
+    // grid feel sticky and lost the scroll position.
+    td.className = `att-cell${next ? " " + next.toLowerCase() : ""}`
+      + (td.dataset.rest === "1" ? " rest" : "")
+      + (gridEdits[cellKey(person, date)] !== undefined ? " edited" : "");
+    td.textContent = next ? STATUS_MARK[next] : "";
+    td.setAttribute("aria-label", `${person} ${date}: ${next || "not marked"}`);
+    refreshSaveButton();
+  }
+
+  function refreshSaveButton() {
+    const btn = document.getElementById("saveAttendanceBtn");
+    if (!btn) return;
+    const n = Object.keys(gridEdits).length;
+    btn.disabled = n === 0;
+    btn.innerHTML = `<i class="fa-solid fa-floppy-disk"></i> Save${n ? ` (${n})` : ""}`;
+  }
+
+  function wireGrid(el) {
+    document.getElementById("gridPrev").addEventListener("click", () => {
+      if (!confirmDiscard()) return;
+      gridMonth = shiftMonth(gridMonth, -1);
+      renderTakeAttendance(el);
+    });
+    document.getElementById("gridNext").addEventListener("click", () => {
+      if (!confirmDiscard()) return;
+      gridMonth = shiftMonth(gridMonth, 1);
+      renderTakeAttendance(el);
+    });
+
+    // Event delegation: one listener instead of ~1,400.
+    const body = document.getElementById("attGridBody");
+    body.addEventListener("click", (e) => {
+      const td = e.target.closest(".att-cell");
+      if (td) cycleCell(td);
+    });
+    body.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" && e.key !== " ") return;
+      const td = e.target.closest(".att-cell");
+      if (!td) return;
+      e.preventDefault();
+      cycleCell(td);
+    });
+
+    // Clicking a day heading marks that whole column present.
+    Utils.qsa(".att-grid-day", el).forEach(th => th.addEventListener("click", () => {
+      const date = th.dataset.date;
+      Utils.qsa(`.att-cell[data-date="${date}"]`, el).forEach(td => {
+        if (td.classList.contains("future")) return;
+        if (statusFor(td.dataset.person, date) === "Present") return;
+        cycleCellTo(td, "Present");
+      });
+      refreshSaveButton();
+    }));
+
+    document.getElementById("gridTodayPresent").addEventListener("click", () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const cells = Utils.qsa(`.att-cell[data-date="${today}"]`, el);
+      if (!cells.length) {
+        Components.createToast("Today is not in the month you are viewing.", "info");
+        return;
+      }
+      cells.forEach(td => cycleCellTo(td, "Present"));
+      refreshSaveButton();
+    });
+
+    const search = document.getElementById("gridSearch");
+    search.addEventListener("input", () => {
+      const q = search.value.trim().toLowerCase();
+      Utils.qsa(".att-grid-row", el).forEach(tr => {
+        tr.style.display = !q || tr.dataset.search.includes(q) ? "" : "none";
+      });
+    });
+
+    document.getElementById("saveAttendanceBtn").addEventListener("click", () => saveGrid(el));
+    document.getElementById("exportAttendanceBtn")
+      .addEventListener("click", () => downloadRegister(new Date().toISOString().slice(0, 10)));
+  }
+
+  function cycleCellTo(td, status) {
+    const { person, date } = td.dataset;
+    const original = roster?.marks?.[person]?.[date] || null;
+    if (status === original) delete gridEdits[cellKey(person, date)];
+    else gridEdits[cellKey(person, date)] = status;
+    td.className = `att-cell ${status.toLowerCase()}`
+      + (gridEdits[cellKey(person, date)] !== undefined ? " edited" : "");
+    td.textContent = STATUS_MARK[status];
+  }
+
+  function confirmDiscard() {
+    if (!Object.keys(gridEdits).length) return true;
+    const ok = window.confirm("You have unsaved marks. Leave the month and discard them?");
+    if (ok) Object.keys(gridEdits).forEach(k => delete gridEdits[k]);
+    return ok;
+  }
+
+  async function saveGrid(el) {
+    const entries = Object.entries(gridEdits);
+    if (!entries.length) return;
+
+    // The save endpoint takes one date at a time, so group the edits by day.
+    const byDate = {};
+    entries.forEach(([key, status]) => {
+      const [personId, date] = key.split("|");
+      if (!status) return;                    // cleared cells are not sent
+      const person = roster.people.find(p => p.id === personId);
+      (byDate[date] ||= []).push({
+        person_id: personId,
+        person_type: person?.person_type || "staff",
+        status,
+      });
+    });
+
+    const btn = document.getElementById("saveAttendanceBtn");
+    btn.disabled = true;
+    btn.innerHTML = `<i class="fa-solid fa-spinner fa-spin"></i> Saving...`;
+
+    let saved = 0;
+    const failed = [];
+    for (const [date, marks] of Object.entries(byDate)) {
+      try {
+        const res = await API.saveAttendance(date, marks);
+        saved += res?.saved ?? marks.length;
+      } catch (err) {
+        // Report which days failed rather than a blanket error: a partial
+        // save is otherwise invisible and the user re-marks everything.
+        failed.push(`${date} (${err.message})`);
+      }
+    }
+
+    if (failed.length) {
+      Components.createToast(`Saved ${saved}. Failed: ${failed.join("; ")}`, "error");
+    } else {
+      Components.createToast(`Saved ${saved} mark${saved === 1 ? "" : "s"}.`, "success");
+      AppEvents.logAudit(user, "UPDATE_RECORD", `attendance/${gridMonth}`);
+
+      // Carried over from the old one-day save: management is notified when
+      // absences are recorded. Dropping this on the rewrite would have
+      // silently removed a feature nobody asked me to remove.
+      const absentees = entries
+        .filter(([, status]) => status === "Absent")
+        .map(([key]) => {
+          const [personId, date] = key.split("|");
+          return { name: roster.people.find(p => p.id === personId)?.name || personId, date };
+        });
+      if (absentees.length) {
+        AppEvents.notify({
+          title: `${absentees.length} absence${absentees.length > 1 ? "s" : ""} recorded`,
+          body: `${absentees.slice(0, 3).map(a => `${a.name} (${a.date})`).join(", ")}`
+                + `${absentees.length > 3 ? ` +${absentees.length - 3} more` : ""}.`,
+          icon: "fa-user-slash", type: "warning", link: "attendance",
+          target: { roles: ["Super Admin", "General Manager"], departments: [Roles.WORKFORCE_DEPT] },
+        });
+      }
+      if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
+      Object.keys(gridEdits).forEach(k => delete gridEdits[k]);
+    }
+    await DataStore.load(["attendance"], { force: true });
+    scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
+    renderStats();
+    await renderTakeAttendance(el);
   }
 
   /**
@@ -433,38 +686,6 @@ const AttendancePage = (() => {
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = original; }
     }
-  }
-
-  async function saveAttendance(people) {
-    const marks = people
-      .filter(p => pendingMarks[p.id])
-      .map(p => ({ person_id: p.id, person_type: p.type, status: pendingMarks[p.id] }));
-    if (!marks.length) { Components.createToast("Nothing to save — mark at least one person.", "info"); return; }
-
-    let saved = 0;
-    try {
-      // Goes through the API so the Workforce-only rule is enforced centrally.
-      ({ saved } = await API.saveAttendance(selectedDate, marks));
-    } catch (err) {
-      Components.createToast(err.message || "Could not save attendance.", "error");
-      return;
-    }
-    scopedAttendance = Roles.visibleAttendance(user, DataStore.attendance);
-
-    const absentees = people.filter(p => pendingMarks[p.id] === "Absent");
-    AppEvents.logAudit(user, "UPDATE_RECORD", `attendance/${selectedDate}`);
-    if (absentees.length) {
-      AppEvents.notify({
-        title: `${absentees.length} absence${absentees.length > 1 ? "s" : ""} recorded`,
-        body: `${selectedDate}: ${absentees.slice(0, 3).map(p => p.name).join(", ")}${absentees.length > 3 ? ` +${absentees.length - 3} more` : ""}.`,
-        icon: "fa-user-slash", type: "warning", link: "attendance",
-        target: { roles: ["Super Admin", "General Manager"], departments: [Roles.WORKFORCE_DEPT] },
-      });
-    }
-
-    Components.createToast(`Attendance saved for ${saved} people on ${selectedDate}.`, "success");
-    renderStats();
-    if (window.Shell?.refreshNotifications) Shell.refreshNotifications();
   }
 
   // ---------------- AI Absence Ranking ----------------

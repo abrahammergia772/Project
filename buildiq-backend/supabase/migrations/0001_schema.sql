@@ -59,6 +59,10 @@ create table if not exists public.users (
     -- Storage key for an uploaded profile photo, prefixed with the backend
     -- that holds it ("supabase:..." or "local:...").
     avatar_url        varchar(400),
+    -- Readable staff number shown on the attendance register. Nullable:
+    -- assigned by _backfill_employee_ids() on first boot after upgrading.
+    employee_id       varchar(32) unique,
+    shift             varchar(64),
     client_id         varchar(64)  references public.clients (id) on delete set null,
     linked_project    varchar(200),
     joined            timestamptz  not null default now(),
@@ -209,6 +213,10 @@ create table if not exists public.daily_workers (
     phone          varchar(40),
     status         varchar(24) not null default 'Active',
     avatar_color   varchar(16),
+    -- Daily workers sit on the same register as staff, so they carry the
+    -- same identity fields. DW- prefixed to stay distinguishable.
+    employee_id    varchar(32) unique,
+    shift          varchar(64),
     joined         timestamptz not null default now()
 );
 create index if not exists ix_daily_workers_project_id on public.daily_workers (project_id);

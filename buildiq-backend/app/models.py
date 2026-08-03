@@ -46,6 +46,13 @@ class User(Base):
     # Uploaded profile photo. Stored via services/storage.py (Supabase Storage,
     # or local disk when that is not configured); this holds the storage key.
     avatar_url: Mapped[str | None] = mapped_column(String(400))
+    # Human-readable staff number shown on the register (EMP-2026-0001).
+    # Nullable and UNIQUE: existing rows predate it and are backfilled on
+    # startup, but two people must never share one.
+    employee_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    # Which shift this person works. Free text rather than an enum so an
+    # organisation can name its own shifts without a migration.
+    shift: Mapped[str | None] = mapped_column(String(64))
     client_id: Mapped[str | None] = mapped_column(String(64), ForeignKey("clients.id", ondelete="SET NULL"))
     linked_project: Mapped[str | None] = mapped_column(String(200))
     joined: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -186,6 +193,10 @@ class DailyWorker(Base):
     phone: Mapped[str | None] = mapped_column(String(40))
     status: Mapped[str] = mapped_column(String(24), default="Active")
     avatar_color: Mapped[str | None] = mapped_column(String(16))
+    # Daily workers appear on the same register as staff, so they carry the
+    # same two identity fields. Prefixed DW- to stay distinguishable.
+    employee_id: Mapped[str | None] = mapped_column(String(32), unique=True, index=True)
+    shift: Mapped[str | None] = mapped_column(String(64))
     joined: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
